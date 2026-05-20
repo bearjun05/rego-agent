@@ -32,7 +32,13 @@ export default defineHandler({
       prompt: classifyPrompt,
     });
 
-    // 2) 텔레그램 알림 (포맷은 본인이 마음껏 바꾸세요)
+    // 2) 한 줄 요약
+    const { text: summary } = await ctx.llm.generate({
+      prompt: `다음 슬랙 메시지를 핵심만 담아 한 문장(30자 이내)으로 요약해. 존댓말 없이 간결하게.\n\n${event.text}`,
+      maxTokens: 60,
+    });
+
+    // 3) 텔레그램 알림
     const emoji =
       category === 'question'
         ? '❓'
@@ -42,15 +48,22 @@ export default defineHandler({
             ? '📅'
             : '📰';
 
+    const label: Record<string, string> = {
+      question: '질문',
+      request: '요청',
+      schedule: '일정',
+      info: '참고',
+    };
+
     const lines = [
-      `${emoji} *${category.toUpperCase()}*${confidence >= 0.7 ? '' : ' (애매)'}`,
+      `${emoji} *[${label[category] ?? category}]* ${summary.trim()}${confidence < 0.7 ? ' _(분류 불확실)_' : ''}`,
       ``,
-      `*from:* ${event.userName ?? event.user}`,
-      `*ch:* #${event.channelName ?? event.channel}`,
-      ``,
-      event.text.slice(0, 280) + (event.text.length > 280 ? '…' : ''),
+      `*보낸 사람:* ${event.userName ?? event.user}`,
+      `*채널:* #${event.channelName ?? event.channel}`,
     ];
-    if (reason) lines.push(``, `_${reason}_`);
+    if (event.text.length > 0) {
+      lines.push(``, `> ${event.text.slice(0, 200)}${event.text.length > 200 ? '…' : ''}`);
+    }
     if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
 
     await ctx.tools['telegram.send']!({
@@ -58,6 +71,6 @@ export default defineHandler({
       parseMode: 'Markdown',
     });
 
-    return { category, confidence };
+    return { category, confidence, summary: summary.trim() };
   },
 });
