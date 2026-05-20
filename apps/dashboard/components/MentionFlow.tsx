@@ -22,6 +22,7 @@ interface FlowItem {
     ts: string;
     permalink: string | null;
   } | null;
+  isTest?: boolean;
 }
 
 interface AgentInfo {
@@ -61,9 +62,9 @@ export function MentionFlow() {
     <div className="brut p-0 overflow-hidden">
       <div className="p-4 border-b-2 border-ink bg-rust text-paper flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="font-display font-bold text-lg">🎯 멘션 → 텔레그램 매핑</h2>
+          <h2 className="font-display font-bold text-lg">📨 실제로 이렇게 메시지를 받고 있어요!</h2>
           <div className="font-mono text-[10px] uppercase opacity-80 mt-0.5">
-            1주차 핵심 — 슬랙 입력과 각자의 텔레그램 응답을 한눈에
+            슬랙 멘션을 받아서 텔레그램으로 보낸 실시간 기록
           </div>
         </div>
         <select
@@ -103,6 +104,11 @@ export function MentionFlow() {
                   <span className="font-display font-bold">
                     {agent?.displayName ?? item.telegram.agentName}
                   </span>
+                  {item.isTest && (
+                    <span className="font-mono text-[10px] uppercase bg-ink text-paper px-1.5 py-0.5">
+                      🧪 테스트
+                    </span>
+                  )}
                 </div>
                 <span className="font-mono text-[10px] uppercase text-muted">
                   {fmtRelativeTime(item.telegram.sentAt)}

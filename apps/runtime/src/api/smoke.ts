@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { eq, desc, and } from 'drizzle-orm';
-import { getDb, fixtures as fixturesTable, smokeRuns, agents } from '@rego/db';
+import { randomUUID } from 'node:crypto';
+import { getDb, fixtures as fixturesTable, smokeRuns, agents, toolCalls, slackMentions } from '@rego/db';
 import type { AgentEvent, SlackMentionEvent } from '@rego/runtime-sdk';
 import { getAgent, listAgents } from '../agent-registry.js';
 import { runAgentForEvent } from '../agent-runner.js';
@@ -176,8 +177,26 @@ export function createSmokeApi() {
 
     const isCross = !!triggeredFromAgent && triggeredFromAgent !== agentName;
 
+    // 스모크용 가짜 슬랙 멘션 기록 (week1 매핑에 "테스트" 태그로 노출됨)
+    const db0 = getDb();
+    const [smokeMention] = await db0
+      .insert(slackMentions)
+      .values({
+        eventId: `smoke-${randomUUID()}`,
+        teamId: 'T_SMOKE',
+        channel: event.channel,
+        channelName: event.channelName,
+        user: event.user,
+        userName: event.userName,
+        ts: event.ts,
+        text: event.text,
+        raw: { test: true },
+      })
+      .returning();
+
     const result = await runAgentForEvent(agent, event, {
       triggeredBy: isCross ? 'cross-smoke' : 'smoke',
+      sourceSlackMentionId: smokeMention?.id, // 텔레그램 매핑 연결 → 매핑 뷰에 표시
     });
 
     // smoke_runs 기록
@@ -204,7 +223,16 @@ export function createSmokeApi() {
       details: { fixtureId: fixtureForRun.id, status: result.status },
     });
 
-    return c.json({ result, fixture: fixtureForRun, event });
+    // 실제로 텔레그램에 보낸 메시지(들) 추출 — 스모크 결과에 "이렇게 답장 갔어요" 표시용
+    const tgCalls = await db
+      .select()
+      .from(toolCalls)
+      .where(and(eq(toolCalls.runId, result.runId), eq(toolCalls.toolId, 'telegram.send')));
+    const telegramSent = tgCalls
+      .map((t) => (t.input as { text?: string } | null)?.text)
+      .filter((t): t is string => !!t);
+
+    return c.json({ result, fixture: fixtureForRun, event, telegramSent });
   });
 
   // POST /api/smoke/run-all — 한 에이전트에 모든 fixture 자동 실행 (push 후)

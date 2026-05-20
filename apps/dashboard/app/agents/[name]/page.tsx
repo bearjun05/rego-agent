@@ -194,6 +194,8 @@ function SectionSmokeTest({ agentName }: { agentName: string }) {
   const [instant, setInstant] = useState('');
   const [running, setRunning] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ status: string; result?: unknown; error?: string; durationMs: number; costUsd: number } | null>(null);
+  const [lastInput, setLastInput] = useState<string>('');
+  const [telegramSent, setTelegramSent] = useState<string[]>([]);
 
   useEffect(() => {
     fetch('/api/runtime/smoke/fixtures')
@@ -202,17 +204,20 @@ function SectionSmokeTest({ agentName }: { agentName: string }) {
       .catch(() => {});
   }, []);
 
-  const run = async (body: Record<string, unknown>, key: string) => {
+  const run = async (body: Record<string, unknown>, key: string, inputText: string) => {
     setRunning(key);
     setLastResult(null);
+    setTelegramSent([]);
+    setLastInput(inputText);
     try {
       const res = await fetch('/api/runtime/smoke/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentName, ...body }),
       });
-      const data = (await res.json()) as { result?: typeof lastResult };
+      const data = (await res.json()) as { result?: typeof lastResult; telegramSent?: string[] };
       setLastResult(data.result ?? null);
+      setTelegramSent(data.telegramSent ?? []);
     } finally {
       setRunning(null);
     }
@@ -236,11 +241,11 @@ function SectionSmokeTest({ agentName }: { agentName: string }) {
             placeholder="예: 내일 회의 가능하세요?"
             className="flex-1 border-2 border-ink bg-paper px-3 py-2 font-mono text-sm"
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && instant.trim()) run({ instantText: instant.trim() }, 'instant');
+              if (e.key === 'Enter' && instant.trim()) run({ instantText: instant.trim() }, 'instant', instant.trim());
             }}
           />
           <button
-            onClick={() => instant.trim() && run({ instantText: instant.trim() }, 'instant')}
+            onClick={() => instant.trim() && run({ instantText: instant.trim() }, 'instant', instant.trim())}
             disabled={!!running || !instant.trim()}
             className="btn btn-primary"
           >
@@ -256,7 +261,7 @@ function SectionSmokeTest({ agentName }: { agentName: string }) {
             <div className="font-mono text-[10px] uppercase text-muted">{f.channelName} · {f.userName}</div>
             <div className="text-sm mt-1 mb-3 flex-1 line-clamp-3">{f.text}</div>
             <button
-              onClick={() => run({ fixtureId: f.id }, f.id)}
+              onClick={() => run({ fixtureId: f.id }, f.id, f.text)}
               disabled={!!running}
               className="btn justify-center text-xs w-full"
             >
@@ -266,25 +271,52 @@ function SectionSmokeTest({ agentName }: { agentName: string }) {
         ))}
       </div>
 
-      {/* 결과 */}
+      {/* 결과 — 실제 텔레그램 답장이 핵심 */}
       {lastResult && (
         <div className={`brut p-4 mt-4 ${lastResult.status === 'success' ? '' : 'bg-rust/10'}`}>
-          <div className="flex items-center justify-between font-mono text-xs uppercase mb-2">
+          <div className="flex items-center justify-between font-mono text-xs uppercase mb-3">
             <span>{lastResult.status === 'success' ? '✅ 성공' : '❌ ' + lastResult.status}</span>
             <span className="text-muted">
               {fmtDuration(lastResult.durationMs)} · {fmtCurrency(lastResult.costUsd)}
             </span>
           </div>
+
           {lastResult.error ? (
             <div className="text-rust text-sm font-mono">{lastResult.error}</div>
+          ) : telegramSent.length > 0 ? (
+            // 입력 → 텔레그램 답장 (채팅 말풍선)
+            <div className="space-y-2">
+              {lastInput && (
+                <div className="flex justify-start">
+                  <div className="max-w-[80%] brut-tight bg-paper p-3">
+                    <div className="font-mono text-[10px] uppercase text-muted mb-1">💬 슬랙 (입력)</div>
+                    <div className="text-sm whitespace-pre-wrap break-words">{lastInput}</div>
+                  </div>
+                </div>
+              )}
+              {telegramSent.map((t, i) => (
+                <div key={i} className="flex justify-end">
+                  <div className="max-w-[80%] bg-ink text-paper p-3">
+                    <div className="font-mono text-[10px] uppercase opacity-70 mb-1">📱 텔레그램 답장</div>
+                    <div className="text-sm whitespace-pre-wrap break-words">{t}</div>
+                  </div>
+                </div>
+              ))}
+              <div className="text-[10px] text-muted text-right pt-1">
+                ↑ 실제로 텔레그램에 이렇게 전송됐어요
+              </div>
+            </div>
           ) : (
-            <pre className="text-xs font-mono bg-sand p-3 overflow-x-auto whitespace-pre-wrap">
-              {JSON.stringify(lastResult.result, null, 2)}
-            </pre>
+            // 텔레그램 전송이 없을 때 (handler가 telegram.send 안 부른 경우)
+            <div>
+              <pre className="text-xs font-mono bg-sand p-3 overflow-x-auto whitespace-pre-wrap">
+                {JSON.stringify(lastResult.result, null, 2)}
+              </pre>
+              <div className="text-[10px] text-muted mt-2">
+                ⚠ 텔레그램으로 보낸 메시지가 없어요. (텔레그램 미연결이거나 handler에서 telegram.send를 안 불렀어요)
+              </div>
+            </div>
           )}
-          <div className="text-[10px] text-muted mt-2">
-            💡 텔레그램이 연결돼 있으면 실제 알림도 갔어요. 텔레그램 확인해보세요!
-          </div>
         </div>
       )}
     </section>

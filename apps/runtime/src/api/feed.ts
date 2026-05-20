@@ -91,10 +91,16 @@ export function createFeedApi() {
     }
 
     return c.json({
-      flow: messages.map((m) => ({
-        telegram: m,
-        slack: m.triggeredBySlackMentionId ? mentionMap.get(m.triggeredBySlackMentionId) : null,
-      })),
+      flow: messages.map((m) => {
+        const slack = m.triggeredBySlackMentionId
+          ? mentionMap.get(m.triggeredBySlackMentionId)
+          : null;
+        const isTest =
+          !!slack &&
+          ((slack.eventId?.startsWith('smoke-') ?? false) ||
+            (slack.raw as { test?: boolean } | null)?.test === true);
+        return { telegram: m, slack: slack ?? null, isTest };
+      }),
     });
   });
 
