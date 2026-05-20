@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const classifyPrompt = await readFile(path.join(here, 'prompts/classify.md'), 'utf8');
+const summarizePrompt = await readFile(path.join(here, 'prompts/summarize.md'), 'utf8');
 
 /**
  * 본인 에이전트의 실제 동작 코드.
@@ -32,7 +33,13 @@ export default defineHandler({
       prompt: classifyPrompt,
     });
 
-    // 2) 텔레그램 알림 (포맷은 본인이 마음껏 바꾸세요)
+    // 2) 요약
+    const { text: summary } = await ctx.llm.generate({
+      system: summarizePrompt,
+      prompt: event.text,
+    });
+
+    // 3) 텔레그램 알림 (포맷은 본인이 마음껏 바꾸세요)
     const emoji =
       category === 'question'
         ? '❓'
@@ -48,7 +55,7 @@ export default defineHandler({
       `*from:* ${event.userName ?? event.user}`,
       `*ch:* #${event.channelName ?? event.channel}`,
       ``,
-      event.text.slice(0, 280) + (event.text.length > 280 ? '…' : ''),
+      summary,
     ];
     if (reason) lines.push(``, `_${reason}_`);
     if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
@@ -58,6 +65,6 @@ export default defineHandler({
       parseMode: 'Markdown',
     });
 
-    return { category, confidence };
+    return { category, confidence, summary };
   },
 });
