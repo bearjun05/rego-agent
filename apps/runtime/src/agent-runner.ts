@@ -41,6 +41,23 @@ function getAllToolsForAgent(agent: LoadedAgent): Map<string, ToolDefinition> {
 // ─────────────────────────────────────────────────────────
 // Event routing — 어느 에이전트가 이 이벤트를 받아야 하나
 // ─────────────────────────────────────────────────────────
+
+// 슬랙 유저ID(<@U…>) → 에이전트 slug 매핑. DB(agents.slack_user_id)에서 로드.
+const slackUserToSlug = new Map<string, string>();
+
+/** DB에서 slack_user_id 매핑을 메모리로 로드 (서버 시작 + reload 시 호출) */
+export async function refreshSlackUserMap(): Promise<void> {
+  try {
+    const rows = await getDb()
+      .select({ name: agents.name, sid: agents.slackUserId })
+      .from(agents);
+    slackUserToSlug.clear();
+    for (const r of rows) if (r.sid) slackUserToSlug.set(r.sid, r.name);
+  } catch {
+    /* DB 미가용 시 무시 — 텍스트 매칭 폴백 */
+  }
+}
+
 export function matchAgentsForEvent(event: AgentEvent, ownMentionsOnly = true): LoadedAgent[] {
   const all = listAgents();
   const matched: LoadedAgent[] = [];
@@ -64,18 +81,23 @@ export function matchAgentsForEvent(event: AgentEvent, ownMentionsOnly = true): 
         if (t.emoji !== event.emoji) continue;
       }
 
-      // slack.mention 의 경우 — 본인 이름 포함 검사
+      // slack.mention 의 경우 — 본인이 멘션됐는지 검사
       if (event.type === 'slack.mention' && ownMentionsOnly) {
         const text = event.text ?? '';
         const nameLower = agent.name.toLowerCase();
         const displayLower = (agent.manifest.displayName ?? '').toLowerCase();
         const txtLower = text.toLowerCase();
-        // @uj_choe / @uj-choe 또는 한글 이름까지 폭넓게
-        const isMatch =
+        // 1순위(실제 슬랙): <@U…> 멘션 → slack_user_id 매칭
+        const mentionedIds = [...text.matchAll(/<@([A-Z0-9]+)>/g)]
+          .map((m) => m[1])
+          .filter((x): x is string => !!x);
+        const idMatch = mentionedIds.some((id) => slackUserToSlug.get(id) === agent.name);
+        // 폴백(fixture/스모크): 텍스트에 @slug / @displayName
+        const textMatch =
           txtLower.includes(`@${nameLower}`) ||
           txtLower.includes(`@${nameLower.replace(/\./g, '')}`) ||
           (displayLower && txtLower.includes(`@${displayLower}`));
-        if (!isMatch) continue;
+        if (!idMatch && !textMatch) continue;
       }
 
       matched.push(agent);

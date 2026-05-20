@@ -8,6 +8,7 @@ import { TelegramClient } from '@rego/tools/telegram';
 import { env } from '../env.js';
 import { createLogger } from '../logger.js';
 import { reloadAll, getAgentsRoot, getAgent } from '../agent-registry.js';
+import { refreshSlackUserMap } from '../agent-runner.js';
 import { getEventBus } from '../event-bus.js';
 import { syncManifestToolsForAgent, ensureAgentRow } from '../manifest-sync.js';
 import { listAgents } from '../agent-registry.js';
@@ -207,6 +208,7 @@ export function createGithubRouter() {
             await ensureAgentRow(a); // 폴더 → DB row 동기화
             await syncManifestToolsForAgent(a);
           }
+          await refreshSlackUserMap(); // slack_user_id 매핑 갱신
           // 변경된 에이전트만 AI 분석 (코드 읽고 "뭘 만들었는지" → 대시보드 프로필)
           for (const slug of changed) {
             const agent = getAgent(slug);

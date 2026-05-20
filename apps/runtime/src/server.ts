@@ -15,6 +15,7 @@ import { serve } from '@hono/node-server';
 import { env } from './env.js';
 import { createLogger } from './logger.js';
 import { loadAllAgents, listAgents } from './agent-registry.js';
+import { refreshSlackUserMap } from './agent-runner.js';
 import { syncManifestToolsForAgent, ensureAgentRow } from './manifest-sync.js';
 import { createSlackRouter } from './webhooks/slack.js';
 import { createTelegramRouter } from './webhooks/telegram.js';
@@ -84,6 +85,9 @@ async function main() {
     }
   }
   log.info(`loaded ${listAgents().length} agents`);
+
+  // 슬랙 멘션 라우팅용 slack_user_id 매핑 로드
+  await refreshSlackUserMap();
 
   const app = await buildApp();
 

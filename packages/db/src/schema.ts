@@ -23,6 +23,7 @@ export const agents = pgTable(
     githubHandle: text('github_handle'),
     telegramChatId: text('telegram_chat_id'),
     telegramUsername: text('telegram_username'),
+    slackUserId: text('slack_user_id'), // 슬랙 멘션 라우팅: <@U…> → 이 에이전트
     icon: text('icon').default('🤖'),
     color: text('color').default('#000000'),
     description: text('description'),
