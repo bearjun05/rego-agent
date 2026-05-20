@@ -4,53 +4,29 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const classifyPrompt = await readFile(path.join(here, 'prompts/classify.md'), 'utf8');
+const summarizePrompt = await readFile(path.join(here, 'prompts/summarize.md'), 'utf8');
 
-/**
- * 본인 에이전트의 실제 동작 코드.
- *
- * 이벤트 종류별 함수:
- *   - onSlackMention: 슬랙에서 본인 이름이 태그될 때
- *   - onSlackMessage: 채널 메시지 (트리거에 명시했을 때)
- *   - onSlackReaction: 이모지 반응 (트리거에 명시했을 때)
- *   - onCron: 스케줄
- *   - onManual: 대시보드에서 수동 실행
- */
 export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
-    // 1) 분류
-    const { category, confidence, reason } = await ctx.llm.classify({
-      text: event.text,
-      categories: [
-        { id: 'question', description: '답변이 필요한 질문' },
-        { id: 'request', description: '작업 요청' },
-        { id: 'schedule', description: '일정/회의 조율' },
-        { id: 'info', description: '정보 공유, 답변 필요 X' },
-      ],
-      prompt: classifyPrompt,
+    const { text: rawSummary } = await ctx.llm.generate(event.text, {
+      system: summarizePrompt,
+      maxTokens: 120,
+      temperature: 0.2,
+      purpose: 'slack-mention-summary',
     });
 
-    // 2) 텔레그램 알림 (포맷은 본인이 마음껏 바꾸세요)
-    const emoji =
-      category === 'question'
-        ? '❓'
-        : category === 'request'
-          ? '📝'
-          : category === 'schedule'
-            ? '📅'
-            : '📰';
+    const summary = rawSummary.trim().split('\n')[0]!.slice(0, 120);
 
     const lines = [
-      `${emoji} *${category.toUpperCase()}*${confidence >= 0.7 ? '' : ' (애매)'}`,
+      `📣 *슬랙 멘션 요약*`,
+      ``,
+      summary,
       ``,
       `*from:* ${event.userName ?? event.user}`,
       `*ch:* #${event.channelName ?? event.channel}`,
-      ``,
-      event.text.slice(0, 280) + (event.text.length > 280 ? '…' : ''),
     ];
-    if (reason) lines.push(``, `_${reason}_`);
     if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
 
     await ctx.tools['telegram.send']!({
@@ -58,6 +34,6 @@ export default defineHandler({
       parseMode: 'Markdown',
     });
 
-    return { category, confidence };
+    return { summary };
   },
 });
