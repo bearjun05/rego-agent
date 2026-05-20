@@ -170,3 +170,68 @@ git push
 - 텔레그램 무응답 → `/start <slug>` slug 오타, 봇(@rego_agent_bot) 확인.
 - push 거절 → 내 폴더(`agents/<내slug>/`) 밖을 건드리면 CODEOWNERS가 막는다. 내 폴더 안에서만 작업.
 - LLM 에러 → 운영자에게 알림 (OpenRouter 키/한도).
+
+---
+
+# 프로젝트 레퍼런스 (코치 Q&A용 — 사용자가 물으면 여기서 찾아 답한다)
+
+## 한 줄 정의
+스파르타 AI 에이전트 스터디 플랫폼. 15명의 비개발자가 본인 슬랙 멘션을 처리하는 AI 비서를 8주간 직접 만든다.
+
+## 핵심 멘탈 모델 (에이전트 = 레고)
+에이전트 = **트리거(언제) + 도구(무엇을) + 프롬프트/규칙(어떻게) + 상태(기억)**.
+각 사용자는 본인 폴더 `agents/<slug>/` 안에서 이 4축을 자유롭게 조립한다. 런타임은 슬랙/텔레그램/LLM만 제공하고 정책을 강제하지 않는다.
+
+## 도메인 용어
+- **agent**: 사용자가 만든 AI 비서 (폴더 1개 = 에이전트 1개)
+- **manifest** (`agent.config.ts`): 에이전트 명함 — 이름·트리거·도구·아이콘
+- **handler** (`handler.ts`): 실제 동작 코드 (이벤트 받아 처리하는 메인 진입점)
+- **trigger**: 발화 조건 — `slack.mention`, `slack.message`, `slack.reaction`, `cron` 등
+- **tool**: 에이전트가 쓰는 함수 — `slack.reply`, `telegram.send`, `llm.generate`, `llm.classify` 등
+- **run**: 핸들러 한 번의 실행 단위
+- **fixture / smoke**: 가짜 슬랙 멘션으로 본인 에이전트를 검증하는 테스트
+
+## 폴더 구조 (모노레포)
+```
+rego-agent/
+├── apps/runtime/        ← Hono API 서버 (webhook 수신 + AgentRunner). 서버에서 실행됨
+├── apps/dashboard/      ← Next.js 대시보드 (rego.jotto.in)
+├── packages/runtime-sdk/← defineAgent / defineTool / defineTrigger
+├── packages/tools/      ← Slack / Telegram / LLM 공통 도구
+├── packages/db/         ← Drizzle ORM (Postgres) 스키마
+├── agents/_template/    ← 새 폴더의 시작 템플릿
+└── agents/<slug>/       ← 각자 폴더 (본인만 수정 가능)
+```
+
+## 내 폴더 안에서 쓰는 것들
+- `agent.config.ts`: `triggers: [trigger.slackMention()]`, `tools: ['telegram.send']` 등
+- `handler.ts`: `onSlackMention(event, ctx)` 안에서 `ctx.tools['telegram.send']({ text })` 또는 `ctx.llm.generate(...)`
+- `prompts/*.md`: LLM 프롬프트 (분류 기준·답변 톤 등, 자연어로 수정)
+- `tools/*.ts`: 내가 만든 커스텀 도구 (`defineTool`) — 자동 등록
+- 상태 저장: `ctx.state.set/get` (본인 namespace, 다른 사람 못 봄)
+- 다른 사람 정보: `ctx.peers.list()`, `ctx.peers.getManifest(slug)` (read-only)
+
+## 사용 가능한 도구 (ctx.tools)
+- `slack.reply` / `slack.post_message` / `slack.add_reaction` / `slack.search` / `slack.get_thread`
+- `telegram.send` / `telegram.send_with_button`
+- `llm.generate` / `llm.classify`  (또는 간단히 `ctx.llm.generate`, `ctx.llm.classify`, `ctx.llm.generateJson`)
+
+## 기술 스택 / 운영
+- 호스팅: **이 서버 자체 호스팅** (Railway 아님). Postgres(docker) + runtime(3001) + dashboard(3030) + Caddy(rego.jotto.in)
+- LLM: OpenRouter (분류=Haiku급, 답변/채팅=Sonnet급 등 모델 env로 지정)
+- DB: Postgres + Drizzle ORM (영구 로그)
+- 배포: 본인 폴더 수정 → `git push` → GitHub webhook → 서버가 `agents/`만 동기화 + reload + AI분석 → 대시보드/텔레그램 반영
+- 안전장치: 분당 200 도구 / 100 LLM 초과 시 자동 정지(runaway) + audit. 핸들러 timeout 30초.
+- 비용: 실시간 집계만 (한도는 운영자가 봄). 멘션 1건 ~ $0.001 수준(저렴한 모델 기준).
+
+## 8주 커리큘럼 (에이전트는 레고)
+- **1주차**: 슬랙 멘션 → 텔레그램 알림 (분류 포함)
+- **2주차**: Calendar 등 도구 하나 더 붙이기
+- **3주차+**: 여러 도구를 조합한 오케스트레이터, 프롬프트 고도화
+- 매주 블록을 하나씩 끼우며 나만의 비서를 키운다.
+
+## 반드시 지키는 규칙 (학습자)
+1. **내 폴더(`agents/<내slug>/`) 안에서만** 수정·커밋·푸시. 밖은 CODEOWNERS가 막는다.
+2. 시크릿(API 키/토큰) 코드에 절대 금지. 환경변수는 운영자가 관리.
+3. 공통 파일(package.json, pnpm-lock 등) 수정 금지 — 필요하면 운영자에게.
+4. 로컬에서 직접 실행할 필요 없음. 편집 + push만 하면 서버가 실행.
