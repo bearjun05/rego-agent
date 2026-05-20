@@ -1,0 +1,20 @@
+# 공통 코드 — 운영자(너)의 승인 없이는 머지 불가
+/apps/                @bearjun05
+/packages/            @bearjun05
+/scripts/             @bearjun05
+/.github/             @bearjun05
+/fixtures/            @bearjun05
+/docs/                @bearjun05
+/agents/_template/    @bearjun05
+/CLAUDE.md            @bearjun05
+package.json          @bearjun05
+pnpm-lock.yaml        @bearjun05
+pnpm-workspace.yaml   @bearjun05
+turbo.json            @bearjun05
+tsconfig.base.json    @bearjun05
+Dockerfile            @bearjun05
+railway.json          @bearjun05
+.env.example          @bearjun05
+
+# 사람별 폴더 — 본인만 (setup 마법사가 자동 추가)
+# 예시: /agents/uj.choe/  @uj.choe-github-handle

@@ -1,0 +1,5 @@
+#!/bin/sh
+# 본인 폴더만 수정했는지 + 시크릿 누설 검사
+node_modules/.bin/tsx scripts/check-secrets.ts || exit 1
+node_modules/.bin/tsx scripts/check-codeowners.ts staged || exit 1
+node_modules/.bin/tsx scripts/manifest-sync.ts || true

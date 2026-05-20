@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+.turbo/
+
+# Cache
+.cache/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Test
+coverage/
+
+# Local data
+data/
+*.sqlite
+*.sqlite-journal
+*.db
+
+# Plans (개인 작업 메모)
+.claude/plans/
+
+# Misc
+*.local
+.env.1p
