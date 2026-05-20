@@ -6,22 +6,39 @@ import path from 'node:path';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const classifyPrompt = await readFile(path.join(here, 'prompts/classify.md'), 'utf8');
 
-/**
- * 본인 에이전트의 실제 동작 코드.
- *
- * 이벤트 종류별 함수:
- *   - onSlackMention: 슬랙에서 본인 이름이 태그될 때
- *   - onSlackMessage: 채널 메시지 (트리거에 명시했을 때)
- *   - onSlackReaction: 이모지 반응 (트리거에 명시했을 때)
- *   - onCron: 스케줄
- *   - onManual: 대시보드에서 수동 실행
- */
+// 수신 확인 이모지 — 바꾸려면 여기만 수정 (콜론 없이 slack 이모지 이름)
+const REACTION_EMOJI = 'eyes';
+
 export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
-    // 1) 분류
-    const { category, confidence, reason } = await ctx.llm.classify({
+    // 1) 수신 확인 이모지 즉시 달기
+    await ctx.tools['slack.add_reaction']!({
+      channel: event.channel,
+      timestamp: event.ts,
+      emoji: REACTION_EMOJI,
+    }).catch((e) => ctx.logger.warn('이모지 달기 실패', { e }));
+
+    // 2) 스레드 컨텍스트 읽기 (스레드 안 멘션일 때)
+    let threadContext = '';
+    if (event.threadTs && event.threadTs !== event.ts) {
+      const { messages } = await ctx.tools['slack.get_thread']!({
+        channel: event.channel,
+        ts: event.threadTs,
+      }).catch(() => ({ messages: [] as { ts: string; text: string; user: string }[] }));
+
+      const prior = messages.filter((m) => m.ts !== event.ts);
+      if (prior.length > 0) {
+        threadContext = prior
+          .slice(-5) // 최근 5개만
+          .map((m) => `${m.user}: ${m.text}`)
+          .join('\n');
+      }
+    }
+
+    // 3) 분류
+    const { category, confidence } = await ctx.llm.classify({
       text: event.text,
       categories: [
         { id: 'question', description: '답변이 필요한 질문' },
@@ -32,43 +49,45 @@ export default defineHandler({
       prompt: classifyPrompt,
     });
 
-    // 2) 한 줄 요약
+    // 4) 한 줄 요약 (스레드 맥락 있으면 포함)
+    const summaryPrompt = threadContext
+      ? `[스레드 맥락]\n${threadContext}\n\n[멘션 내용]\n${event.text}\n\n위를 바탕으로 핵심만 한 문장(30자 이내)으로 요약해. 존댓말 없이 간결하게.`
+      : `다음 슬랙 메시지를 핵심만 담아 한 문장(30자 이내)으로 요약해. 존댓말 없이 간결하게.\n\n${event.text}`;
+
     const { text: summary } = await ctx.llm.generate({
-      prompt: `다음 슬랙 메시지를 핵심만 담아 한 문장(30자 이내)으로 요약해. 존댓말 없이 간결하게.\n\n${event.text}`,
+      prompt: summaryPrompt,
       maxTokens: 60,
     });
 
-    // 3) 텔레그램 알림
-    const emoji =
-      category === 'question'
-        ? '❓'
-        : category === 'request'
-          ? '📝'
-          : category === 'schedule'
-            ? '📅'
-            : '📰';
-
-    const label: Record<string, string> = {
+    // 5) 텔레그램 버튼 메시지
+    const categoryEmoji: Record<string, string> = {
+      question: '❓',
+      request: '📝',
+      schedule: '📅',
+      info: '📰',
+    };
+    const categoryLabel: Record<string, string> = {
       question: '질문',
       request: '요청',
       schedule: '일정',
       info: '참고',
     };
 
+    const unsure = confidence < 0.7 ? ' (분류 불확실)' : '';
     const lines = [
-      `${emoji} *[${label[category] ?? category}]* ${summary.trim()}${confidence < 0.7 ? ' _(분류 불확실)_' : ''}`,
+      `${categoryEmoji[category] ?? '📌'} [${categoryLabel[category] ?? category}] ${summary.trim()}${unsure}`,
       ``,
-      `*보낸 사람:* ${event.userName ?? event.user}`,
-      `*채널:* #${event.channelName ?? event.channel}`,
+      `보낸 사람: ${event.userName ?? event.user}`,
+      `채널: #${event.channelName ?? event.channel}`,
     ];
-    if (event.text.length > 0) {
-      lines.push(``, `> ${event.text.slice(0, 200)}${event.text.length > 200 ? '…' : ''}`);
-    }
-    if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
+    if (threadContext) lines.push(``, `💬 스레드 맥락 포함하여 요약됨`);
+    lines.push(``, `> ${event.text.slice(0, 200)}${event.text.length > 200 ? '…' : ''}`);
 
-    await ctx.tools['telegram.send']!({
+    await ctx.tools['telegram.send_with_button']!({
       text: lines.join('\n'),
-      parseMode: 'Markdown',
+      buttons: [
+        { text: '슬랙에서 답장하기 →', callbackData: event.permalink ?? event.ts },
+      ],
     });
 
     return { category, confidence, summary: summary.trim() };
