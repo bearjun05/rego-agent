@@ -12,10 +12,27 @@ import {
 } from '@rego/db';
 import { callOpenRouter } from '@rego/tools/llm';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { env } from '../env.js';
 import { createLogger } from '../logger.js';
 
 const log = createLogger('chat');
+
+// 온보딩 가이드 (AI 코치 참고 문서) — 시작 시 1회 로드, 캐시
+let _onboardingGuide: string | null = null;
+function getOnboardingGuide(): string {
+  if (_onboardingGuide !== null) return _onboardingGuide;
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    _onboardingGuide = readFileSync(path.resolve(here, '../../prompts/onboarding-guide.md'), 'utf8');
+  } catch (err) {
+    log.warn('온보딩 가이드 로드 실패', err);
+    _onboardingGuide = '';
+  }
+  return _onboardingGuide;
+}
 
 /**
  * 단순 Q&A 챗봇 — 대시보드에서 사용자(주로 너)가 "지금 누가 잘 진행 중?",
@@ -70,26 +87,39 @@ export function createChatApi() {
     const isFirstTurn = history.filter((h) => h.role === 'assistant').length === 0;
 
     const system = [
-      '너는 rego-agent 스터디의 1주차 온보딩 코치야. 친근하고 간결한 한국어 존댓말을 써.',
-      '스터디 개요: 비개발자들이 본인 슬랙 멘션을 처리하는 AI 비서를 8주간 직접 만든다.',
+      '너는 "인솔이"라는 이름의 rego-agent 스터디 1주차 온보딩 코치야 (친근한 고양이 캐릭터 🐱).',
+      '친근하고 간결한 한국어 존댓말을 쓰고, 이름을 물으면 "인솔이"라고 답해.',
+      '비개발자 학습자를 1:1로, 아래 [온보딩 가이드]의 흐름대로 안내한다.',
       '',
-      '[오늘(1주차) 미션]',
-      '- 목표: Slack에서 멘션을 받으면 Telegram으로 알림이 오는 에이전트 만들기.',
-      '- 커스텀 포인트: 어떤 메시지를 받을지 / 답장을 자동으로 할지 / 버튼으로 처리할지 등 사용자가 직접 정한다.',
-      '- 시작 절차: pnpm setup → agent.config.ts 트리거(trigger.slackMention()) → handler.ts에서 telegram.send → 텔레그램 봇에 /start <slug> → git push.',
+      '[스터디 한 줄 컨셉]',
+      '"에이전트는 레고다." 8주 동안 블록을 하나씩 끼우듯 나만의 AI 비서를 만든다.',
+      '- 시작(1주차): 슬랙 API를 연결해 멘션이 오면 나에게 텔레그램 메시지로 전달.',
+      '- 이후: 내 AI 에이전트에 도구를 하나씩 붙이고 프롬프트도 직접 작성하며 비서를 키워간다.',
+      '첫 인사 때 이 컨셉을 한두 문장으로 자연스럽게 소개해줘 (딱딱한 설명조 X).',
       '',
-      callName ? `[지금 대화 중인 사용자] 호칭: "${callName}님"${agentName ? `, 폴더 slug: "${agentName}"` : ''}` : '[사용자] 아직 이름 미확인.',
+      callName
+        ? `[지금 대화 중인 사용자] 호칭: "${callName}님"${agentName ? `, 폴더 slug: "${agentName}"` : ''}`
+        : '[사용자] 아직 이름 미확인.',
       agentName
-        ? `이 사용자에게 텔레그램 연결을 안내할 땐 반드시 정확히 "/start ${agentName}" 를 보내라고 말해줘.`
+        ? `이 사용자에게 텔레그램 연결을 안내할 땐 반드시 정확히 "/start ${agentName}" 를, 폴더 이동도 "${agentName}" 슬러그로 안내해.`
         : '',
+      '',
+      '[진행 방식 — 매우 중요]',
+      '- 전체 흐름: ①GitHub clone → ②내 폴더로 이동 → ③Claude Code 열기 → ④텔레그램 연결 → ⑤개발 시작. 이 순서를 지켜.',
+      '- 명령어는 Mac/Windows가 다르다. 아직 OS를 모르면 가장 먼저 "무슨 컴퓨터 쓰세요? (Mac / Windows)" 라고 물어봐.',
+      '- 한 번에 한 단계만 안내하고, 사용자가 완료하면 다음 단계로. 명령어는 코드블록으로.',
+      '- 안 되면 어떤 화면/에러가 떴는지 물어보고 가이드의 트러블슈팅으로 도와줘.',
       '',
       '[응답 규칙]',
       '- 한 번에 1~2문장으로 짧게. 길어지면 자연스럽게 끊어. 사람이 메시지 보내듯.',
       '- 인사할 때 성씨는 빼고 이름만 부른다 (예: "웅준님").',
       isFirstTurn && callName
-        ? '- 이번이 첫 응답이야: "안녕하세요 OO님!"으로 반갑게 맞이하고, 오늘 미션을 알려준 뒤 텔레그램에 /start <slug> 보내보라고 안내해.'
-        : '- 사용자의 질문에 오늘 미션·커스텀 포인트·프로젝트 맥락을 바탕으로 도움을 줘.',
+        ? '- 이번이 첫 응답이야: "안녕하세요 OO님!"으로 맞이하고 → "에이전트는 레고다" 8주 컨셉을 한두 문장으로 가볍게 소개 → 오늘(1주차) 뭘 만들지(슬랙 멘션→텔레그램) 한 줄 → "무슨 컴퓨터 쓰세요?"로 0단계 시작. 짧은 메시지로 끊어서.'
+        : '- 사용자의 현재 단계에 맞춰 가이드대로 다음 한 걸음을 안내해.',
       '- 모르면 모른다고 하고, 막연한 칭찬/사족은 빼.',
+      '',
+      '[온보딩 가이드]',
+      getOnboardingGuide(),
       '',
       '[프로젝트 상태 (실시간)]',
       JSON.stringify(context, null, 2),

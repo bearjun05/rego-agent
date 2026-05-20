@@ -78,9 +78,12 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-b-2 border-ink p-4 flex items-center justify-between">
-          <div>
-            <div className="font-display font-bold text-lg">AI 코치</div>
-            <div className="font-mono text-[10px] uppercase text-muted">PROJECT-AWARE Q&A</div>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl leading-none">🐱</span>
+            <div>
+              <div className="font-display font-bold text-lg">인솔이</div>
+              <div className="font-mono text-[10px] uppercase text-muted">PROJECT-AWARE Q&A</div>
+            </div>
           </div>
           <button onClick={onClose} className="btn">
             닫기

@@ -56,7 +56,7 @@ function splitChunks(text: string, maxSentences = 2): string[] {
 
 // 이름을 받기 전 가벼운 인사만 스크립트로 (즉시 표시). 이후 온보딩·Q&A는 전부 LLM이 생성.
 const greetingScript = [
-  '안녕하세요! 👋',
+  '안녕하세요! 저는 인솔이예요 🐱',
   '이름이 뭐예요?',
   '이름 알려주면 오늘 뭐 할지 알려줄게요!',
 ];
@@ -208,9 +208,9 @@ export function HomeChat() {
     <div className="brut bg-paper flex flex-col h-[68vh] min-h-[460px] max-h-[720px]">
       <div className="border-b-2 border-ink p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-2xl leading-none">🤖</span>
+          <span className="text-2xl leading-none">🐱</span>
           <div>
-            <div className="font-display font-bold text-lg leading-tight">AI 코치</div>
+            <div className="font-display font-bold text-lg leading-tight">인솔이</div>
             <div className="font-mono text-[10px] uppercase text-muted">
               {given ? `${given}님과 함께 1주차` : '오늘 뭐 할지 알려줄게요'}
             </div>
