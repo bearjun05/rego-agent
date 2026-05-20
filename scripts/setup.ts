@@ -83,8 +83,12 @@ async function main() {
   console.log(`    ${c.bold}/start ${slug}${c.reset}\n`);
   console.log(`${c.dim}(봇이 자동으로 본인을 등록하면 다음 단계로 진행됩니다)${c.reset}\n`);
 
+  // 학습자 노트북에서는 외부 서버로 polling.
+  // 운영자가 별도 서버 쓰면 REGO_API_BASE env로 override 가능.
   const baseUrl =
-    process.env.PUBLIC_BASE_URL ?? process.env.RUNTIME_URL ?? 'http://localhost:3001';
+    process.env.REGO_API_BASE ??
+    process.env.PUBLIC_BASE_URL ??
+    'https://rego.jotto.in/api/runtime';
   const ok = await pollTelegramRegistration(slug, baseUrl);
 
   if (!ok) {
@@ -195,16 +199,22 @@ async function pollTelegramRegistration(
   baseUrl: string,
   maxAttempts = 60,
 ): Promise<boolean> {
+  // baseUrl이 .../api/runtime 으로 끝나면 그대로 사용,
+  // 아니면 /api 붙임 (localhost runtime 직접 호출 케이스).
+  const apiPrefix = baseUrl.endsWith('/api/runtime') ? '' : '/api';
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const res = await fetch(`${baseUrl}/api/agents/${slug}`);
+      const res = await fetch(`${baseUrl}${apiPrefix}/agents/${slug}`);
       if (res.ok) {
         const data = (await res.json()) as { agent?: { telegramChatId?: string } };
         if (data.agent?.telegramChatId) return true;
       }
     } catch {
-      // server not running locally — skip
-      return false;
+      // 네트워크 오류 시 한 번 더 시도하지 않고 종료
+      if (i === 0) {
+        process.stdout.write(`\n${c.yellow}⚠ 서버 연결 실패 (${baseUrl})${c.reset}\n`);
+        return false;
+      }
     }
     if (i === 0) process.stdout.write(`${c.dim}대기 중`);
     process.stdout.write('.');
