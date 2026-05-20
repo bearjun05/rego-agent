@@ -20,7 +20,7 @@ export default defineAgent({
     trigger.slackMention(),
   ],
 
-  tools: ['telegram.send'],
+  tools: ['telegram.send', 'telegram.send_with_button'],
 
   // 모델 선택은 선택사항 (런타임 기본값 사용)
 });
