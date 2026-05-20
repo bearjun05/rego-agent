@@ -14,7 +14,7 @@ import { getDb, agents, events, runs, llmCalls, toolCalls, slackMentions, telegr
 const DEMO_AGENTS = [
   {
     name: 'uj.choe',
-    displayName: '최우진',
+    displayName: '김하늘',
     githubHandle: 'bearjun05',
     telegramChatId: '6631216371',
     telegramUsername: 'ujchoe',
@@ -24,7 +24,7 @@ const DEMO_AGENTS = [
   },
   {
     name: 'sumi',
-    displayName: '장수미',
+    displayName: '이서준',
     githubHandle: 'sumi-jang',
     telegramChatId: '7000000001',
     telegramUsername: 'sumi',
@@ -34,7 +34,7 @@ const DEMO_AGENTS = [
   },
   {
     name: 'minho',
-    displayName: '김민호',
+    displayName: '박도윤',
     githubHandle: 'minho-kim',
     telegramChatId: '7000000002',
     telegramUsername: 'minho',
@@ -44,7 +44,7 @@ const DEMO_AGENTS = [
   },
   {
     name: 'jiwon',
-    displayName: '박지원',
+    displayName: '정유나',
     githubHandle: 'jiwon-park',
     telegramChatId: '7000000003',
     telegramUsername: 'jiwon',
@@ -66,28 +66,28 @@ const DEMO_MENTIONS: Array<{
   {
     to: 'uj.choe',
     text: '@uj.choe 환불 정책 어떻게 적용해야 하나요? KDT 부트캠프 중도 이탈 케이스가 헷갈려요',
-    userName: '장수미',
+    userName: '이서준',
     channelName: '운영팀',
     category: 'question',
-    reply: '❓ *QUESTION*\n\n*from:* 장수미\n*ch:* #운영팀\n\n환불 정책 적용 방법이 헷갈리는데, KDT 부트캠프 중도 이탈 환불은 어떻게 처리…\n\n_환불 절차에 대한 질문 — 정책 페이지 공유 권장_',
+    reply: '❓ *QUESTION*\n\n*from:* 이서준\n*ch:* #운영팀\n\n환불 정책 적용 방법이 헷갈리는데, KDT 부트캠프 중도 이탈 환불은 어떻게 처리…\n\n_환불 절차에 대한 질문 — 정책 페이지 공유 권장_',
     hoursAgo: 0.1,
   },
   {
     to: 'uj.choe',
     text: '@uj.choe 내일까지 이 기획안 검토 좀 부탁드릴 수 있을까요?',
-    userName: '김민호',
+    userName: '박도윤',
     channelName: '제품실',
     category: 'request',
-    reply: '📝 *REQUEST*\n\n*from:* 김민호\n*ch:* #제품실\n\n내일까지 이 기획안 검토 좀 부탁드릴 수 있을까요?\n\n_검토 요청 — 답변 권장 시간 24h_',
+    reply: '📝 *REQUEST*\n\n*from:* 박도윤\n*ch:* #제품실\n\n내일까지 이 기획안 검토 좀 부탁드릴 수 있을까요?\n\n_검토 요청 — 답변 권장 시간 24h_',
     hoursAgo: 0.5,
   },
   {
     to: 'sumi',
     text: '@sumi 내일 오후 2시 30분에 KDT 정기 회의 가능하세요?',
-    userName: '장수미',
+    userName: '이서준',
     channelName: '운영팀',
     category: 'schedule',
-    reply: '📅 *SCHEDULE*\n\n*from:* 장수미\n*ch:* #운영팀\n\n내일 오후 2시 30분에 KDT 정기 회의 가능하세요?\n\n_일정 조율 — 캘린더 확인 필요_',
+    reply: '📅 *SCHEDULE*\n\n*from:* 이서준\n*ch:* #운영팀\n\n내일 오후 2시 30분에 KDT 정기 회의 가능하세요?\n\n_일정 조율 — 캘린더 확인 필요_',
     hoursAgo: 0.8,
   },
   {

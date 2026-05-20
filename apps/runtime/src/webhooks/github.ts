@@ -1,12 +1,50 @@
 import { Hono } from 'hono';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import path from 'node:path';
 import { env } from '../env.js';
 import { createLogger } from '../logger.js';
-import { reloadAll } from '../agent-registry.js';
+import { reloadAll, getAgentsRoot, getAgent } from '../agent-registry.js';
 import { getEventBus } from '../event-bus.js';
 import { syncManifestToolsForAgent, ensureAgentRow } from '../manifest-sync.js';
 import { listAgents } from '../agent-registry.js';
+import { analyzeAgent } from '../analyzer.js';
 
 const log = createLogger('webhook:github');
+const execAsync = promisify(exec);
+
+const REPO_ROOT = path.resolve(getAgentsRoot(), '..');
+
+/**
+ * 서버 코드를 push와 동기화.
+ * agents/ 폴더만 원격 최신으로 덮어씀 (운영자가 서버에서 작업 중인
+ * 다른 파일 — 대시보드 등 — 은 건드리지 않기 위해).
+ * 반환: 변경된 에이전트 slug 집합 + 현재 commit sha
+ */
+async function syncAgentsFromGit(): Promise<{ changed: Set<string>; commit: string }> {
+  const changed = new Set<string>();
+  try {
+    await execAsync('git fetch origin main', { cwd: REPO_ROOT });
+    const { stdout: before } = await execAsync('git rev-parse HEAD', { cwd: REPO_ROOT });
+    // agents/ 폴더만 원격 버전으로 체크아웃 (working tree의 다른 변경 보존)
+    const { stdout: diff } = await execAsync(
+      'git diff --name-only HEAD origin/main -- agents/',
+      { cwd: REPO_ROOT },
+    );
+    await execAsync('git checkout origin/main -- agents/', { cwd: REPO_ROOT });
+    const { stdout: after } = await execAsync('git rev-parse origin/main', { cwd: REPO_ROOT });
+
+    for (const line of diff.split('\n')) {
+      const m = line.match(/^agents\/([^/]+)\//);
+      if (m && m[1] && !m[1].startsWith('_')) changed.add(m[1]);
+    }
+    log.info(`git sync: ${changed.size} agents changed`, { changed: [...changed] });
+    return { changed, commit: after.trim() || before.trim() };
+  } catch (err) {
+    log.error('git sync failed', err);
+    return { changed, commit: 'unknown' };
+  }
+}
 
 async function verifyGitHubSignature(secret: string, signature: string, body: string) {
   if (!signature) return false;
@@ -66,16 +104,22 @@ export function createGithubRouter() {
         },
       });
 
-      // 에이전트 폴더 자동 리로드 + manifest sync
+      // 1) git에서 agents/ 동기화 → 2) reload → 3) DB sync → 4) 변경분 AI 분석
       queueMicrotask(async () => {
         try {
+          const { changed, commit } = await syncAgentsFromGit();
           await reloadAll();
           for (const a of listAgents()) {
-            await ensureAgentRow(a); // 새 폴더 → DB row 동기화
+            await ensureAgentRow(a); // 폴더 → DB row 동기화
             await syncManifestToolsForAgent(a);
           }
+          // 변경된 에이전트만 AI 분석 (코드 읽고 "뭘 만들었는지" → 대시보드 프로필)
+          for (const slug of changed) {
+            const agent = getAgent(slug);
+            if (agent) await analyzeAgent(agent, commit);
+          }
         } catch (err) {
-          log.error('reload failed', err);
+          log.error('reload/analyze failed', err);
         }
       });
     }

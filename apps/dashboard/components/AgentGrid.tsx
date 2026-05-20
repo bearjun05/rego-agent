@@ -11,6 +11,7 @@ interface AgentSummary {
   icon: string;
   color: string;
   description: string | null;
+  analysisSummary: string | null;
   isPaused: boolean;
   loaded: boolean;
   stats: {
@@ -79,11 +80,9 @@ export function AgentGrid() {
             </div>
           </div>
 
-          {a.description && (
-            <div className="text-xs text-muted line-clamp-2 mb-3 min-h-[2rem]">
-              {a.description}
-            </div>
-          )}
+          <div className="text-xs text-muted line-clamp-2 mb-3 min-h-[2rem]">
+            {a.analysisSummary ?? '아직 시작 전이에요'}
+          </div>
 
           <div className="border-t-2 border-ink pt-2 grid grid-cols-3 gap-2 font-mono text-[10px] uppercase">
             <div>

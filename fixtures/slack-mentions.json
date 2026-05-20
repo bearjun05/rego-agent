@@ -2,11 +2,11 @@
   {
     "id": "q-refund-policy",
     "title": "질문: 환불 정책 문의",
-    "text": "환불 정책 적용 방법이 헷갈리는데, KDT 부트캠프 중도 이탈 환불은 어떻게 처리하나요?",
+    "text": "환불 정책 적용 방법이 헷갈리는데, 중도 이탈 환불은 어떻게 처리하나요?",
     "channel": "C_OPS",
     "channelName": "운영팀",
-    "user": "U_SUMI",
-    "userName": "장수미",
+    "user": "U_GANADA",
+    "userName": "김철수",
     "ts": "1715000000.000100",
     "expectedCategory": "question"
   },
@@ -15,20 +15,20 @@
     "title": "요청: 검토 요청",
     "text": "내일까지 이 기획안 검토 좀 부탁드릴 수 있을까요? 급한 건 아니지만 회의 전에 의견 듣고 싶어요",
     "channel": "C_PRODUCT",
-    "channelName": "제품실",
-    "user": "U_MINHO",
-    "userName": "김민호",
+    "channelName": "제품팀",
+    "user": "U_RAMABA",
+    "userName": "이영희",
     "ts": "1715000100.000100",
     "expectedCategory": "request"
   },
   {
     "id": "s-meeting-tomorrow",
     "title": "일정: 내일 미팅",
-    "text": "내일 오후 2시 30분에 KDT 정기 회의 가능하세요? 안 되시면 다른 시간 알려주세요",
+    "text": "내일 오후 2시 30분에 정기 회의 가능하세요? 안 되시면 다른 시간 알려주세요",
     "channel": "C_OPS",
     "channelName": "운영팀",
-    "user": "U_JANG",
-    "userName": "장수미",
+    "user": "U_SAARA",
+    "userName": "박민수",
     "ts": "1715000200.000100",
     "expectedCategory": "schedule"
   },
@@ -38,8 +38,8 @@
     "text": "새 정책 슬라이드 공유드려요. 다음 주부터 적용됩니다. https://example.com/policy",
     "channel": "C_NOTICE",
     "channelName": "공지",
-    "user": "U_LEADER",
-    "userName": "팀장님",
+    "user": "U_JACHA",
+    "userName": "최지은",
     "ts": "1715000300.000100",
     "expectedCategory": "info"
   },
@@ -49,8 +49,8 @@
     "text": "이거 어떻게 생각하세요?",
     "channel": "C_DEV",
     "channelName": "개발팀",
-    "user": "U_DEV",
-    "userName": "개발자",
+    "user": "U_TAPA",
+    "userName": "정현우",
     "ts": "1715000400.000100",
     "expectedCategory": "question"
   }

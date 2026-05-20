@@ -36,6 +36,13 @@ export const agents = pgTable(
     isPaused: boolean('is_paused').notNull().default(false),
     pausedReason: text('paused_reason'),
 
+    // AI 코드 분석 결과 (push마다 갱신) — 대시보드 프로필 표시용
+    analysisSummary: text('analysis_summary'), // 비개발자용 1-2문장 요약
+    capabilities: jsonb('capabilities').$type<string[]>(), // 기능 리스트
+    techniques: jsonb('techniques').$type<string[]>(), // 사용 기법 (분류/요약/버튼 등)
+    analyzedCommit: text('analyzed_commit'),
+    analyzedAt: timestamp('analyzed_at', { withTimezone: true }),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -312,6 +319,7 @@ export const chatMessages = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     sessionId: text('session_id').notNull(),
+    agentName: text('agent_name'), // 매칭된 사용자(폴더 slug) — 그 사용자의 대화 로그로 귀속
     role: text('role').notNull(), // user / assistant
     content: text('content').notNull(),
     contextSnapshot: jsonb('context_snapshot').$type<unknown>(),
@@ -320,6 +328,7 @@ export const chatMessages = pgTable(
   },
   (t) => ({
     sessionIdx: index('chat_session_idx').on(t.sessionId, t.createdAt),
+    agentIdx: index('chat_agent_idx').on(t.agentName, t.createdAt),
   }),
 );
 

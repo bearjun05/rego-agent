@@ -16,8 +16,6 @@ export default function HomePage() {
           <span className="text-rust">조립하는 에이전트.</span>
         </h1>
         <p className="mt-5 text-base lg:text-lg text-muted max-w-2xl leading-relaxed">
-          15명의 비개발자가 본인 슬랙 멘션을 처리하는 AI 비서를 8주간 깎습니다.
-          <br className="hidden sm:block" />
           모델 + 도구 + 규칙 + 트리거를 블록처럼 끼워 맞춰, 나만의 비서를 만들어요.
         </p>
 

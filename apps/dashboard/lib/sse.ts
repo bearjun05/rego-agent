@@ -27,16 +27,13 @@ export function useSseEvents(maxEvents = 50): BusEvent[] {
       } catch {}
     };
 
-    // generic onmessage 안 잡힘 — type별로 listener 추가
+    // 비개발자가 보는 활동만 구독 (개발틱한 llm/tool/run.started/audit 제외)
     const types = [
-      'run.started',
-      'run.finished',
-      'llm.called',
-      'tool.called',
-      'slack.mention.received',
-      'audit.recorded',
-      'telegram.registered',
       'github.push',
+      'agent.analyzed',
+      'telegram.registered',
+      'slack.mention.received',
+      'run.finished',
     ];
     for (const t of types) es.addEventListener(t, handler);
 

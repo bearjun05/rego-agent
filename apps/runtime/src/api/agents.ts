@@ -13,6 +13,7 @@ import {
 } from '@rego/db';
 import { listAgents, getAgent } from '../agent-registry.js';
 import { audit } from '../audit.js';
+import { analyzeAgent } from '../analyzer.js';
 
 export function createAgentsApi() {
   const r = new Hono();
@@ -54,6 +55,10 @@ export function createAgentsApi() {
           updatedAt: a.updatedAt,
           loaded: !!loaded,
           manifest: loaded?.manifest ?? a.currentManifest,
+          analysisSummary: a.analysisSummary,
+          capabilities: a.capabilities,
+          techniques: a.techniques,
+          analyzedAt: a.analyzedAt,
           stats: {
             today: {
               cost: parseFloat(costRow?.cost ?? '0'),
@@ -98,6 +103,24 @@ export function createAgentsApi() {
       },
       recentRuns,
       totalCostUsd: parseFloat(costRow?.cost ?? '0'),
+    });
+  });
+
+  // POST /api/agents/:name/analyze — AI 코드 분석 수동 트리거 (테스트/재분석용)
+  r.post('/:name/analyze', async (c) => {
+    const name = c.req.param('name');
+    const agent = getAgent(name);
+    if (!agent) return c.json({ error: `agent ${name} not loaded` }, 404);
+    await analyzeAgent(agent, 'manual');
+    const db = getDb();
+    const [row] = await db.select().from(agents).where(eq(agents.name, name));
+    return c.json({
+      ok: true,
+      analysis: {
+        summary: row?.analysisSummary,
+        capabilities: row?.capabilities,
+        techniques: row?.techniques,
+      },
     });
   });
 
