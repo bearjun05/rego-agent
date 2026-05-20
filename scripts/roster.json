@@ -1,0 +1,18 @@
+[
+  { "slug": "uj_choe",       "displayName": "최웅준", "github": "bearjun05",     "email": "uj.choe@teamsparta.co",       "icon": "🧠", "color": "#C5532E" },
+  { "slug": "sm_jang",       "displayName": "장수미", "github": "sm_jang",       "email": "sm.jang@teamsparta.co",       "icon": "⚡", "color": "#3E5C3E" },
+  { "slug": "sohee_park",    "displayName": "박소희", "github": "sohee_park",    "email": "sohee.park@teamsparta.co",    "icon": "🌸", "color": "#A4506E" },
+  { "slug": "gc_yang",       "displayName": "양기철", "github": "gc_yang",       "email": "gc.yang@teamsparta.co",       "icon": "🌊", "color": "#1E4D8B" },
+  { "slug": "sj_lee",        "displayName": "이선진", "github": "sj_lee",        "email": "sj.lee@teamsparta.co",        "icon": "🔥", "color": "#B5482E" },
+  { "slug": "hs_han",        "displayName": "한효승", "github": "hs_han",        "email": "hs.han@teamsparta.co",        "icon": "🌿", "color": "#4A7C45" },
+  { "slug": "jinyoung_park", "displayName": "박진영", "github": "jinyoung_park", "email": "jinyoung.park@teamsparta.co", "icon": "🦊", "color": "#C77B30" },
+  { "slug": "yj_dan",        "displayName": "단예진", "github": "yj_dan",        "email": "yj.dan@teamsparta.co",        "icon": "🐳", "color": "#2A6B8F" },
+  { "slug": "sy_choi",       "displayName": "최소연", "github": "sy_choi",       "email": "sy.choi@teamsparta.co",       "icon": "🪐", "color": "#5B4A8A" },
+  { "slug": "ys_jang",       "displayName": "장윤서", "github": "ys_jang",       "email": "ys.jang@teamsparta.co",       "icon": "🍀", "color": "#3E7A4E" },
+  { "slug": "chohui_kim",    "displayName": "김초희", "github": "chohui_kim",    "email": "chohui.kim@teamsparta.co",    "icon": "🎯", "color": "#B23A48" },
+  { "slug": "hyungsub_an",   "displayName": "안형섭", "github": "hyungsub_an",   "email": "hyungsub.an@teamsparta.co",   "icon": "🦉", "color": "#7A5C2E" },
+  { "slug": "naseung_kim",   "displayName": "김나승", "github": "naseung_kim",   "email": "naseung.kim@teamsparta.co",   "icon": "🌙", "color": "#43507A" },
+  { "slug": "seung_hb",      "displayName": "황보승", "github": "seung_hb",      "email": "seung.hb@teamsparta.co",      "icon": "🛠️", "color": "#6B6B6B" },
+  { "slug": "sk_tae",        "displayName": "태서경", "github": "sk_tae",        "email": "sk.tae@teamsparta.co",        "icon": "🎨", "color": "#A8497A" },
+  { "slug": "yeonjin_joo",   "displayName": "주연진", "github": "yeonjin_joo",   "email": "yeonjin.joo@teamsparta.co",   "icon": "🧩", "color": "#2E7A6B" }
+]

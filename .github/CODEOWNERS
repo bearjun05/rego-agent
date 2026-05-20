@@ -18,3 +18,22 @@ railway.json          @bearjun05
 
 # 사람별 폴더 — 본인만 (setup 마법사가 자동 추가)
 # 예시: /agents/uj.choe/  @uj.choe-github-handle
+
+# === 학습자 폴더 (bulk-create-agents.ts 자동 관리) ===
+/agents/uj_choe/  @bearjun05
+/agents/sm_jang/  @sm_jang
+/agents/sohee_park/  @sohee_park
+/agents/gc_yang/  @gc_yang
+/agents/sj_lee/  @sj_lee
+/agents/hs_han/  @hs_han
+/agents/jinyoung_park/  @jinyoung_park
+/agents/yj_dan/  @yj_dan
+/agents/sy_choi/  @sy_choi
+/agents/ys_jang/  @ys_jang
+/agents/chohui_kim/  @chohui_kim
+/agents/hyungsub_an/  @hyungsub_an
+/agents/naseung_kim/  @naseung_kim
+/agents/seung_hb/  @seung_hb
+/agents/sk_tae/  @sk_tae
+/agents/yeonjin_joo/  @yeonjin_joo
+# === 학습자 폴더 끝 ===

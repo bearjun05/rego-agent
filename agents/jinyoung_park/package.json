@@ -1,0 +1,9 @@
+{
+  "name": "@agents/jinyoung_park",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@rego/runtime-sdk": "workspace:*"
+  }
+}

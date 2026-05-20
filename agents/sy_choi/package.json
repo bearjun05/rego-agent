@@ -1,0 +1,9 @@
+{
+  "name": "@agents/sy_choi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@rego/runtime-sdk": "workspace:*"
+  }
+}
