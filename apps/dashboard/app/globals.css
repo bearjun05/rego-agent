@@ -100,6 +100,20 @@ html, body {
 }
 .fade-up { animation: fadeUp 200ms ease both; }
 
+/* 타이핑 인디케이터 (사람처럼 "…" 작성 중) */
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+.typing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: #0A0A0A;
+  display: inline-block;
+  animation: typingBounce 1s ease-in-out infinite;
+}
+
 /* 스크롤바 */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
