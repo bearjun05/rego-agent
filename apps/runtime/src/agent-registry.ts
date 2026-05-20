@@ -65,9 +65,15 @@ async function loadAgentFolder(folderPath: string): Promise<LoadedAgent | null> 
 
   if (!existsSync(configPath) || !existsSync(handlerPath)) return null;
 
+  // 캐시버스팅: reload 시 Node ESM 모듈 캐시 때문에 바뀐 코드가 안 읽히는 문제 해결.
+  // (?v= 쿼리는 fileURLToPath에서 떼어지므로 핸들러의 prompt 파일 읽기엔 영향 없음)
+  const bust = `?v=${Date.now()}`;
+
   // 동적 import (tsx가 트랜스파일)
-  const configModule = (await import(pathToFileURL(configPath).href)) as { default: AgentManifest };
-  const handlerModule = (await import(pathToFileURL(handlerPath).href)) as AgentHandlerExports & {
+  const configModule = (await import(pathToFileURL(configPath).href + bust)) as {
+    default: AgentManifest;
+  };
+  const handlerModule = (await import(pathToFileURL(handlerPath).href + bust)) as AgentHandlerExports & {
     default?: AgentHandlerExports;
   };
 
@@ -82,7 +88,7 @@ async function loadAgentFolder(folderPath: string): Promise<LoadedAgent | null> 
     for (const file of toolFiles) {
       if (!file.endsWith('.ts')) continue;
       try {
-        const mod = (await import(pathToFileURL(path.join(customToolsDir, file)).href)) as {
+        const mod = (await import(pathToFileURL(path.join(customToolsDir, file)).href + bust)) as {
           default?: { id: string };
         };
         const tool = mod.default;

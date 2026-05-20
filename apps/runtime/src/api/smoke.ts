@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { getDb, fixtures as fixturesTable, smokeRuns, agents, toolCalls, slackMentions } from '@rego/db';
 import type { AgentEvent, SlackMentionEvent } from '@rego/runtime-sdk';
@@ -227,7 +227,12 @@ export function createSmokeApi() {
     const tgCalls = await db
       .select()
       .from(toolCalls)
-      .where(and(eq(toolCalls.runId, result.runId), eq(toolCalls.toolId, 'telegram.send')));
+      .where(
+        and(
+          eq(toolCalls.runId, result.runId),
+          inArray(toolCalls.toolId, ['telegram.send', 'telegram.send_with_button']),
+        ),
+      );
     const telegramSent = tgCalls
       .map((t) => (t.input as { text?: string } | null)?.text)
       .filter((t): t is string => !!t);
