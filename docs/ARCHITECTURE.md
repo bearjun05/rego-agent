@@ -52,10 +52,10 @@
 
 ## 데이터 흐름 (Slack 멘션 처리)
 
-1. 누군가 슬랙에서 `@uj.choe` 태그
+1. 누군가 슬랙에서 `@uj_choe` 태그
 2. Slack → POST `/webhooks/slack` (signed)
 3. 서명 검증 후 `slack_mentions` 테이블 저장
-4. `matchAgentsForEvent(event)` → 이름 매칭으로 `uj.choe` 에이전트 선택
+4. `matchAgentsForEvent(event)` → 이름 매칭으로 `uj_choe` 에이전트 선택
 5. `runAgentForEvent(agent, event, { sourceSlackMentionId })`
    - `runs` 테이블에 row 생성
    - `createContext()` — 본인 tools/llm/state/peers 주입

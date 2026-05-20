@@ -65,14 +65,29 @@ export const telegramSend = defineTool({
       throw new Error('chatId가 필요해요. setup 마법사로 텔레그램 연결을 먼저 끝내세요.');
     }
     const tg = new TelegramClient(ctx.secret('TELEGRAM_BOT_TOKEN'));
-    const r = await tg.sendMessage({
-      chat_id: finalChatId,
-      text,
-      parse_mode: parseMode,
-      disable_web_page_preview: true,
-    });
-    ctx.logger.info('telegram.send 완료', { messageId: r.message_id });
-    return { ok: true, messageId: r.message_id };
+    try {
+      const r = await tg.sendMessage({
+        chat_id: finalChatId,
+        text,
+        parse_mode: parseMode,
+        disable_web_page_preview: true,
+      });
+      ctx.logger.info('telegram.send 완료', { messageId: r.message_id });
+      return { ok: true, messageId: r.message_id };
+    } catch (err) {
+      // Markdown/HTML 파싱 실패 시 plain text로 재시도 (알림 누락 방지)
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parseMode && /parse entities|can't parse/i.test(msg)) {
+        ctx.logger.warn('telegram 파싱 실패 → plain text 재시도', { msg });
+        const r = await tg.sendMessage({
+          chat_id: finalChatId,
+          text,
+          disable_web_page_preview: true,
+        });
+        return { ok: true, messageId: r.message_id };
+      }
+      throw err;
+    }
   },
 });
 

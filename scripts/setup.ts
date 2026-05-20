@@ -118,12 +118,12 @@ async function main() {
 async function askSlug(ask: (q: string) => Promise<string>): Promise<string | null> {
   for (let i = 0; i < 5; i++) {
     const raw = (await ask(
-      `본인 회사 이메일 닉네임 (영문, 예: ${c.dim}uj.choe${c.reset}): `,
+      `본인 회사 이메일 닉네임 (영문, 예: ${c.dim}uj_choe${c.reset}): `,
     )).trim();
     if (!raw) continue;
     if (!/^[a-z0-9][a-z0-9._-]{1,30}$/i.test(raw)) {
       console.log(
-        `${c.red}❌ 영문/숫자/. _ - 만 가능해요. (예: uj.choe, sumi_jang)${c.reset}`,
+        `${c.red}❌ 영문/숫자/. _ - 만 가능해요. (예: uj_choe, sumi_jang)${c.reset}`,
       );
       continue;
     }

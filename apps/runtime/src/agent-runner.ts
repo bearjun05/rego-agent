@@ -70,7 +70,7 @@ export function matchAgentsForEvent(event: AgentEvent, ownMentionsOnly = true): 
         const nameLower = agent.name.toLowerCase();
         const displayLower = (agent.manifest.displayName ?? '').toLowerCase();
         const txtLower = text.toLowerCase();
-        // @uj.choe / @uj_choe / @uj-choe 또는 한글 이름까지 폭넓게
+        // @uj_choe / @uj-choe 또는 한글 이름까지 폭넓게
         const isMatch =
           txtLower.includes(`@${nameLower}`) ||
           txtLower.includes(`@${nameLower.replace(/\./g, '')}`) ||

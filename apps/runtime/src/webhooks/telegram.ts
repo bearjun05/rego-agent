@@ -48,13 +48,13 @@ export function createTelegramRouter() {
       const parts = text.split(/\s+/);
       const agentName = parts[1]?.trim();
       if (!agentName) {
-        await reply(chatId, '본인 이름과 함께 다시 시도해주세요. 예: `/start uj.choe`');
+        await reply(chatId, '본인 이름과 함께 다시 시도해주세요. 예: `/start uj_choe`');
         return c.json({ ok: true });
       }
 
       // 이름 정규식 검증 (영문 + 점/언더바)
       if (!/^[a-z0-9][a-z0-9._-]{1,30}$/i.test(agentName)) {
-        await reply(chatId, '이름은 영문 + 숫자 + . _ - 만 가능해요. (예: uj.choe)');
+        await reply(chatId, '이름은 영문 + 숫자 + . _ - 만 가능해요. (예: uj_choe)');
         return c.json({ ok: true });
       }
 
@@ -106,7 +106,7 @@ export function createTelegramRouter() {
           '🤖 *Rego Agent Bot*',
           '',
           '명령어:',
-          '`/start <이름>` — 본인 닉네임 등록 (예: `/start uj.choe`)',
+          '`/start <이름>` — 본인 닉네임 등록 (예: `/start uj_choe`)',
           '`/whoami` — 내 등록 상태 확인',
           '`/help` — 도움말',
         ].join('\n'),

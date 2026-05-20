@@ -1,6 +1,12 @@
 import dns from 'node:dns';
-// 이 서버는 IPv6로 나가면 외부 API(Telegram 등)가 타임아웃됨 → IPv4 우선
+import net from 'node:net';
+// 이 서버는 IPv6 경로가 없음 → 외부 API(Telegram 등) ETIMEDOUT 방지:
+// 1) DNS 결과를 IPv4 우선으로
 dns.setDefaultResultOrder('ipv4first');
+// 2) happy-eyeballs(IPv4/IPv6 동시 시도) 끔 → 첫 주소(IPv4)만 연결
+(net as unknown as { setDefaultAutoSelectFamily?: (v: boolean) => void }).setDefaultAutoSelectFamily?.(
+  false,
+);
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';

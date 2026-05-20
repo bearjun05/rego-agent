@@ -49,27 +49,27 @@ pnpm run setup
 ```
 [1/4] 본인 정보를 입력하세요.
 
-본인 회사 이메일 닉네임 (영문, 예: uj.choe): uj.choe
-표시 이름 (한글 가능, 기본: uj.choe): 최우진
+본인 회사 이메일 닉네임 (영문, 예: uj_choe): uj_choe
+표시 이름 (한글 가능, 기본: uj_choe): 최우진
 GitHub 핸들 (CODEOWNERS용, 예: bearjun05): bearjun05
 프로필 이모지 (기본: 🤖): 🧠
 테마 색깔 (hex, 기본: #000000): #C5532E
 ```
 
-→ `agents/uj.choe/` 폴더가 만들어져요.
+→ `agents/uj_choe/` 폴더가 만들어져요.
 
 ## 3. 텔레그램 연결 (2분)
 
 마법사가 안내해줘요:
 
 > 텔레그램에서 @rego_agent_bot 를 검색하고 다음 메시지를 보내세요:
-> `/start uj.choe`
+> `/start uj_choe`
 
 봇이 답장하고 자동으로 연결돼요.
 
 ```
 ✅ 등록 완료!
-이름: uj.choe
+이름: uj_choe
 이제 셋업 마법사로 돌아가세요. 잠시 후 자동으로 진행돼요.
 ```
 
@@ -81,8 +81,8 @@ GitHub 핸들 (CODEOWNERS용, 예: bearjun05): bearjun05
 ## 4. 첫 push (2분)
 
 ```bash
-git add agents/uj.choe
-git commit -m "feat: uj.choe 시작"
+git add agents/uj_choe
+git commit -m "feat: uj_choe 시작"
 git push
 ```
 
@@ -98,12 +98,12 @@ https://<운영자가-알려준-도메인>/
 
 - 본인 카드가 보이면 OK!
 - "스모크" 탭에서 가상 멘션을 던져볼 수 있어요
-- 슬랙에서 본인 이름(`@uj.choe`) 태그하면 텔레그램으로 알림이 와요
+- 슬랙에서 본인 이름(`@uj_choe`) 태그하면 텔레그램으로 알림이 와요
 
 ## 6. 본인 에이전트 깎기 (메인 학습)
 
 ```bash
-cd agents/uj.choe
+cd agents/uj_choe
 claude
 ```
 
@@ -132,7 +132,7 @@ Claude Code가 본인 폴더의 `CLAUDE.md`를 읽고 컨텍스트 잡아요.
 ## 8. push로 배포
 
 ```bash
-git add agents/uj.choe
+git add agents/uj_choe
 git commit -m "feat: 분류 카테고리 확장"
 git push
 ```
