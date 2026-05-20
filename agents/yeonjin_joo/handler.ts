@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const classifyPrompt = await readFile(path.join(here, 'prompts/classify.md'), 'utf8');
+const summarizePrompt = await readFile(path.join(here, 'prompts/summarize.md'), 'utf8');
 
 /**
  * 본인 에이전트의 실제 동작 코드.
@@ -20,19 +21,32 @@ export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
-    // 1) 분류
-    const { category, confidence, reason } = await ctx.llm.classify({
-      text: event.text,
-      categories: [
-        { id: 'question', description: '답변이 필요한 질문' },
-        { id: 'request', description: '작업 요청' },
-        { id: 'schedule', description: '일정/회의 조율' },
-        { id: 'info', description: '정보 공유, 답변 필요 X' },
-      ],
-      prompt: classifyPrompt,
-    });
+    // 1) 분류 + 요약을 병렬로 (둘 다 LLM 호출이라 동시에 돌리면 빠름)
+    const [{ category, confidence, reason }, summaryResult] = await Promise.all([
+      ctx.llm.classify({
+        text: event.text,
+        categories: [
+          { id: 'question', description: '답변이 필요한 질문' },
+          { id: 'request', description: '작업 요청' },
+          { id: 'schedule', description: '일정/회의 조율' },
+          { id: 'info', description: '정보 공유, 답변 필요 X' },
+        ],
+        prompt: classifyPrompt,
+      }),
+      ctx.llm.generate(
+        [
+          summarizePrompt,
+          '',
+          `원문(보낸 사람: ${event.userName ?? event.user}, 채널: #${event.channelName ?? event.channel}):`,
+          event.text,
+        ].join('\n'),
+        { purpose: 'summarize-slack-mention', temperature: 0.3, maxTokens: 200 },
+      ),
+    ]);
 
-    // 2) 텔레그램 알림 (포맷은 본인이 마음껏 바꾸세요)
+    const summary = summaryResult.text.trim();
+
+    // 2) 텔레그램 알림 (요약 중심, 원문은 펼침)
     const emoji =
       category === 'question'
         ? '❓'
@@ -48,9 +62,9 @@ export default defineHandler({
       `*from:* ${event.userName ?? event.user}`,
       `*ch:* #${event.channelName ?? event.channel}`,
       ``,
-      event.text.slice(0, 280) + (event.text.length > 280 ? '…' : ''),
+      `📌 ${summary}`,
     ];
-    if (reason) lines.push(``, `_${reason}_`);
+    if (reason) lines.push(``, `_분류 근거: ${reason}_`);
     if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
 
     await ctx.tools['telegram.send']!({
@@ -58,6 +72,6 @@ export default defineHandler({
       parseMode: 'Markdown',
     });
 
-    return { category, confidence };
+    return { category, confidence, summary };
   },
 });

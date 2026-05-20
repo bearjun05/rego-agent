@@ -11,7 +11,7 @@ import { defineAgent, trigger } from '@rego/runtime-sdk';
 export default defineAgent({
   name: 'yeonjin_joo',
   displayName: '주연진',
-  description: '슬랙 멘션을 분류해서 텔레그램으로 알려줘요',
+  description: '슬랙 멘션을 분류·요약해서 텔레그램으로 알려줘요',
   icon: '🧩',
   color: '#2E7A6B',
 
