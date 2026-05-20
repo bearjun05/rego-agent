@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const classifyPrompt = await readFile(path.join(here, 'prompts/classify.md'), 'utf8');
+const replyDraftPrompt = await readFile(path.join(here, 'prompts/reply-draft.md'), 'utf8');
 
 /**
  * 본인 에이전트의 실제 동작 코드.
@@ -32,7 +33,23 @@ export default defineHandler({
       prompt: classifyPrompt,
     });
 
-    // 2) 텔레그램 알림 (포맷은 본인이 마음껏 바꾸세요)
+    // 2) 슬랙 답장 초안 생성
+    const draftInput = [
+      `카테고리: ${category}`,
+      `보낸 사람: ${event.userName ?? event.user}`,
+      `채널: #${event.channelName ?? event.channel}`,
+      ``,
+      `원문:`,
+      event.text,
+    ].join('\n');
+    const draft = await ctx.llm.generate(draftInput, {
+      system: replyDraftPrompt,
+      purpose: 'generate',
+      maxTokens: 300,
+    });
+    const draftText = draft.text.trim();
+
+    // 3) 텔레그램 알림 (포맷은 본인이 마음껏 바꾸세요)
     const emoji =
       category === 'question'
         ? '❓'
@@ -52,12 +69,15 @@ export default defineHandler({
     ];
     if (reason) lines.push(``, `_${reason}_`);
     if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
+    if (draftText) {
+      lines.push(``, `✍️ *답장 초안*`, '```', draftText, '```');
+    }
 
     await ctx.tools['telegram.send']!({
       text: lines.join('\n'),
       parseMode: 'Markdown',
     });
 
-    return { category, confidence };
+    return { category, confidence, draft: draftText };
   },
 });
