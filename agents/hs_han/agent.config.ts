@@ -11,7 +11,7 @@ import { defineAgent, trigger } from '@rego/runtime-sdk';
 export default defineAgent({
   name: 'hs_han',
   displayName: '한효승',
-  description: '슬랙 멘션을 분류해서 텔레그램으로 알려줘요',
+  description: '슬랙 멘션을 분류·요약하고 답장 후보 3개를 텔레그램 버튼으로 보여줘요',
   icon: '🌿',
   color: '#4A7C45',
 
@@ -20,7 +20,7 @@ export default defineAgent({
     trigger.slackMention(),
   ],
 
-  tools: ['telegram.send'],
+  tools: ['telegram.send', 'telegram.send_with_button'],
 
   // 모델 선택은 선택사항 (런타임 기본값 사용)
 });
