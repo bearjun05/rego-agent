@@ -16,8 +16,8 @@ export function Header() {
           </Link>
 
           <nav className="flex items-center gap-1 sm:gap-3 font-mono text-xs uppercase tracking-wider">
-            <Link href="/" className="px-3 py-1 hover:bg-ink hover:text-paper transition-colors">
-              피드
+            <Link href="/week1" className="px-3 py-1 hover:bg-ink hover:text-paper transition-colors">
+              1주차
             </Link>
             <Link
               href="/smoke"
