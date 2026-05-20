@@ -16,6 +16,7 @@
     "test:watch": "turbo run test:watch",
     "format": "prettier --write .",
     "setup": "tsx scripts/setup.ts",
+    "agents:create": "tsx scripts/bulk-create-agents.ts",
     "seed": "tsx scripts/seed-demo.ts",
     "db:push": "pnpm --filter @rego/runtime db:push",
     "db:studio": "pnpm --filter @rego/runtime db:studio",
