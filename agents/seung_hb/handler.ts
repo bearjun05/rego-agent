@@ -50,7 +50,9 @@ export default defineHandler({
       ``,
       event.text.slice(0, 280) + (event.text.length > 280 ? '…' : ''),
     ];
-    if (reason) lines.push(``, `_${reason}_`);
+    const hasQuestion = event.text.includes('?') || event.text.includes('？');
+    if (hasQuestion) lines.push(``, `_읽고 답변해주세요._`);
+    else if (reason) lines.push(``, `_${reason}_`);
     if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
 
     await ctx.tools['telegram.send']!({
