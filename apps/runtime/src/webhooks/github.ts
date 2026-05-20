@@ -2,6 +2,9 @@ import { Hono } from 'hono';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
+import { eq } from 'drizzle-orm';
+import { getDb, agents } from '@rego/db';
+import { TelegramClient } from '@rego/tools/telegram';
 import { env } from '../env.js';
 import { createLogger } from '../logger.js';
 import { reloadAll, getAgentsRoot, getAgent } from '../agent-registry.js';
@@ -9,11 +12,96 @@ import { getEventBus } from '../event-bus.js';
 import { syncManifestToolsForAgent, ensureAgentRow } from '../manifest-sync.js';
 import { listAgents } from '../agent-registry.js';
 import { analyzeAgent } from '../analyzer.js';
+import { audit } from '../audit.js';
 
 const log = createLogger('webhook:github');
 const execAsync = promisify(exec);
 
 const REPO_ROOT = path.resolve(getAgentsRoot(), '..');
+
+type PushCommit = {
+  id: string;
+  message: string;
+  modified: string[];
+  added: string[];
+  removed: string[];
+  author?: { name?: string; email?: string };
+};
+
+/** 이메일 앞부분의 . → _ → 폴더 slug 추정 (uj.choe@… → uj_choe) */
+function deriveSlug(email?: string): string | null {
+  const local = email?.split('@')[0];
+  return local ? local.replace(/\./g, '_').toLowerCase() : null;
+}
+
+interface FolderViolation {
+  commit: string;
+  warnSlugs: string[]; // 경고 보낼 대상(들)
+  badFiles: string[]; // 본인 폴더 밖 파일
+}
+
+/**
+ * 폴더 경계 검증: 한 커밋은 "에이전트 폴더 하나" 안에서만 수정해야 한다.
+ * - 공통 코드(agents/ 밖) 수정 → 위반
+ * - 두 개 이상의 에이전트 폴더를 동시에 수정 → 위반(남의 폴더 의심)
+ * push는 이미 일어났으므로 막을 순 없지만, 본인에게 텔레그램 경고 + audit.
+ * (공통 코드/남의 폴더 변경은 어차피 syncAgentsFromGit이 본인 폴더만 반영하지 않음)
+ */
+function validatePushFolders(commits: PushCommit[]): FolderViolation[] {
+  const out: FolderViolation[] = [];
+  for (const cm of commits ?? []) {
+    const files = [...(cm.added ?? []), ...(cm.modified ?? []), ...(cm.removed ?? [])];
+    const folders = new Set<string>();
+    const common: string[] = [];
+    for (const f of files) {
+      const m = f.match(/^agents\/([^/]+)\//);
+      if (m && m[1] && !m[1].startsWith('_')) folders.add(m[1]);
+      else common.push(f);
+    }
+    const violated = common.length > 0 || folders.size > 1;
+    if (!violated) continue;
+
+    const authorSlug = deriveSlug(cm.author?.email);
+    const warnSlugs = folders.size ? [...folders] : authorSlug ? [authorSlug] : [];
+    const badFiles = folders.size > 1 ? files : common; // 다중 폴더면 전체, 아니면 공통 파일
+    out.push({ commit: cm.id, warnSlugs, badFiles });
+  }
+  return out;
+}
+
+async function warnOutOfFolder(violations: FolderViolation[]) {
+  if (!violations.length) return;
+  const cfg = env();
+  const db = getDb();
+  const tg = cfg.TELEGRAM_BOT_TOKEN ? new TelegramClient(cfg.TELEGRAM_BOT_TOKEN) : null;
+
+  for (const v of violations) {
+    await audit({
+      action: 'push.folder_violation',
+      actor: v.warnSlugs[0] ?? 'unknown',
+      agentName: v.warnSlugs[0],
+      severity: 'warn',
+      details: { commit: v.commit, badFiles: v.badFiles },
+    });
+    if (!tg) continue;
+    const fileList = v.badFiles.slice(0, 8).map((f) => `• ${f}`).join('\n');
+    for (const slug of v.warnSlugs) {
+      const [row] = await db.select().from(agents).where(eq(agents.name, slug));
+      if (!row?.telegramChatId) continue;
+      const text =
+        `⚠️ *폴더 규칙 위반*\n\n` +
+        `방금 push에서 본인 폴더(\`agents/${slug}/\`) 밖이 수정됐어요.\n` +
+        `규칙: **본인 폴더 안에서만** 작업해주세요 (\`git add agents/${slug}\`).\n\n` +
+        `문제 파일:\n${fileList}\n\n` +
+        `_공통 코드/다른 폴더 변경은 서버에 반영되지 않아요._`;
+      try {
+        await tg.sendMessage({ chat_id: row.telegramChatId, text, parse_mode: 'Markdown' });
+      } catch (err) {
+        log.error('failed to send folder-violation warning', err);
+      }
+    }
+  }
+}
 
 /**
  * 서버 코드를 push와 동기화.
@@ -104,8 +192,14 @@ export function createGithubRouter() {
         },
       });
 
+      // 0) 폴더 경계 검증 (본인 폴더 밖 수정 시 텔레그램 경고 + audit)
       // 1) git에서 agents/ 동기화 → 2) reload → 3) DB sync → 4) 변경분 AI 분석
       queueMicrotask(async () => {
+        try {
+          await warnOutOfFolder(validatePushFolders(payload.commits ?? []));
+        } catch (err) {
+          log.error('folder validation failed', err);
+        }
         try {
           const { changed, commit } = await syncAgentsFromGit();
           await reloadAll();
