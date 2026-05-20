@@ -1,5 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { estimateCost, createLlmApi } from './llm.js';
+import { estimateCost, createLlmApi, extractJson } from './llm.js';
+
+describe('extractJson', () => {
+  it('순수 JSON 파싱', () => {
+    expect(extractJson('{"category":"question","confidence":0.9}')).toEqual({
+      category: 'question',
+      confidence: 0.9,
+    });
+  });
+
+  it('```json 코드블록 제거', () => {
+    const text = '```json\n{"category":"request","confidence":0.8}\n```';
+    expect(extractJson(text)).toEqual({ category: 'request', confidence: 0.8 });
+  });
+
+  it('설명 텍스트가 뒤에 붙어도 JSON만 추출', () => {
+    const text = '{"category":"info","confidence":0.7}\n\n**분석:** 이건 정보 공유입니다.';
+    expect(extractJson(text)).toEqual({ category: 'info', confidence: 0.7 });
+  });
+
+  it('코드블록 + 설명 둘 다 있어도', () => {
+    const text = '```json\n{"category":"schedule","confidence":0.95}\n```\n\n분석: 일정 조율';
+    expect(extractJson(text)).toEqual({ category: 'schedule', confidence: 0.95 });
+  });
+});
 
 describe('estimateCost', () => {
   it('haiku 가격 추정', () => {

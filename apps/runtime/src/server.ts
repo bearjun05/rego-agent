@@ -1,3 +1,7 @@
+import dns from 'node:dns';
+// 이 서버는 IPv6로 나가면 외부 API(Telegram 등)가 타임아웃됨 → IPv4 우선
+dns.setDefaultResultOrder('ipv4first');
+
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';

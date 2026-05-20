@@ -16,12 +16,12 @@ export async function incrementCalls(agentName: string, type: 'tool' | 'llm') {
   const db = getDb();
   const window = currentWindow();
 
-  // upsert + increment
+  // upsert + increment ("window"는 Postgres 예약어라 따옴표 필수)
   const incCol = type === 'llm' ? 'llm_count' : 'calls_count';
   await db.execute(sql.raw(`
-    INSERT INTO rate_limit (agent_name, window, calls_count, llm_count)
+    INSERT INTO rate_limit (agent_name, "window", calls_count, llm_count)
     VALUES ('${agentName.replace(/'/g, "''")}', '${window}', ${type === 'llm' ? 0 : 1}, ${type === 'llm' ? 1 : 0})
-    ON CONFLICT (agent_name, window)
+    ON CONFLICT (agent_name, "window")
     DO UPDATE SET ${incCol} = rate_limit.${incCol} + 1
   `));
 

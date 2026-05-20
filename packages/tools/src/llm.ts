@@ -7,9 +7,27 @@ import type {
 } from '@rego/runtime-sdk';
 
 const DEFAULT_MODEL_GENERATE =
-  process.env.MODEL_GENERATE ?? 'anthropic/claude-sonnet-4.5';
+  process.env.MODEL_GENERATE ?? 'deepseek/deepseek-v4-flash';
 const DEFAULT_MODEL_CLASSIFY =
-  process.env.MODEL_CLASSIFY ?? 'anthropic/claude-haiku-4.5';
+  process.env.MODEL_CLASSIFY ?? 'deepseek/deepseek-v4-flash';
+
+/**
+ * LLM 응답에서 JSON 추출.
+ * 모델이 ```json ... ``` 코드블록이나 설명을 덧붙여도 견고하게 파싱.
+ */
+export function extractJson<T = unknown>(text: string): T {
+  let t = text.trim();
+  // 코드블록 제거
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence && fence[1]) t = fence[1].trim();
+  // 첫 { ~ 마지막 } 추출 (설명 텍스트 제거)
+  const start = t.indexOf('{');
+  const end = t.lastIndexOf('}');
+  if (start !== -1 && end !== -1 && end > start) {
+    t = t.slice(start, end + 1);
+  }
+  return JSON.parse(t) as T;
+}
 
 /**
  * 가벼운 OpenRouter REST 클라이언트.
@@ -155,20 +173,15 @@ export function createLlmApi(opts: CreateLlmApiOptions): LLMApi {
         prompt ??
         `너는 메시지를 카테고리로 분류하는 분류기야. 다음 카테고리 중 하나로만 분류해.\n` +
           cats.map((c) => `- ${c.id}: ${c.description}`).join('\n');
-      const userPrompt = `메시지: """${text}"""\n\nJSON 형식으로 응답: {"category": "<id>", "confidence": <0~1 float>, "reason": "<짧은 설명>"}`;
+      const userPrompt = `메시지: """${text}"""\n\n반드시 순수 JSON만 출력해 (코드블록·설명 금지): {"category": "<id>", "confidence": <0~1 float>, "reason": "<짧은 설명>"}`;
 
       const r = await _call(
         userPrompt,
-        { model: model ?? classifyModel, system, responseFormat: 'json', purpose: 'classify', maxTokens: 200 },
+        { model: model ?? classifyModel, system, responseFormat: 'json', purpose: 'classify', maxTokens: 300 },
         classifyModel,
       );
       try {
-        const parsed = JSON.parse(r.text) as {
-          category: string;
-          confidence: number;
-          reason?: string;
-        };
-        return parsed;
+        return extractJson<{ category: string; confidence: number; reason?: string }>(r.text);
       } catch {
         return { category: cats[0]?.id ?? 'unknown', confidence: 0, reason: 'parse-failed' };
       }
@@ -179,7 +192,7 @@ export function createLlmApi(opts: CreateLlmApiOptions): LLMApi {
         { ...o, responseFormat: 'json' },
         o?.model ?? generateModel,
       );
-      const raw = JSON.parse(r.text);
+      const raw = extractJson(r.text);
       return schema.parse(raw);
     },
   };
@@ -198,6 +211,9 @@ const PRICE_TABLE: Record<string, { input: number; output: number }> = {
   'anthropic/claude-3-5-sonnet': { input: 3.0, output: 15.0 },
   'anthropic/claude-3-7-sonnet': { input: 3.0, output: 15.0 },
   'anthropic/claude-opus-4': { input: 15.0, output: 75.0 },
+  'deepseek/deepseek-v4-flash': { input: 0.2, output: 0.85 },
+  'deepseek/deepseek-v4-pro': { input: 0.5, output: 2.0 },
+  'deepseek/deepseek-chat-v3.1': { input: 0.2, output: 0.8 },
   'openai/gpt-4o-mini': { input: 0.15, output: 0.6 },
   'openai/gpt-4o': { input: 2.5, output: 10.0 },
 };
@@ -291,8 +307,7 @@ export const llmClassify = defineTool({
     });
     const raw = result.choices[0]?.message?.content ?? '{}';
     try {
-      const parsed = JSON.parse(raw) as { category: string; confidence: number; reason?: string };
-      return parsed;
+      return extractJson<{ category: string; confidence: number; reason?: string }>(raw);
     } catch {
       return { category: categories[0] ?? 'unknown', confidence: 0, reason: 'parse-failed' };
     }
