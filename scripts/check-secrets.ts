@@ -57,12 +57,35 @@ const violations: Array<{ file: string; pattern: string; preview: string }> = []
 
 for (const file of filesToCheck) {
   if (IGNORE_FILES.some((re) => re.test(file))) continue;
-  if (path.basename(file).startsWith('.env') && !path.basename(file).startsWith('.env.example')) {
+  const base = path.basename(file);
+  // .env.example, .env.1p (op:// 참조만)는 안전
+  const isSafeEnv = base === '.env.example' || base === '.env.1p';
+  if (base.startsWith('.env') && !isSafeEnv) {
     violations.push({
       file,
       pattern: '.env file committed',
       preview: '<.env files must not be committed>',
     });
+    continue;
+  }
+  // .env.1p는 op:// 참조만 허용 — 실제 토큰 패턴 있으면 차단
+  if (base === '.env.1p') {
+    let content = '';
+    try {
+      content = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const p of PATTERNS) {
+      const m = content.match(p.re);
+      if (m) {
+        violations.push({
+          file,
+          pattern: `${p.name} (in .env.1p — must be op:// reference)`,
+          preview: m[0].slice(0, 30) + '...',
+        });
+      }
+    }
     continue;
   }
   let content = '';

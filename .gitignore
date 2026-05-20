@@ -44,4 +44,5 @@ data/
 
 # Misc
 *.local
-.env.1p
+# .env.1p는 op:// 참조만 있어서 commit OK
+# 실제 값은 1Password vault에만

@@ -36,14 +36,32 @@ pnpm run setup        # 본인 폴더 생성 + 텔레그램 연결
 
 ## 빠른 시작 (운영자, 로컬)
 
+### 옵션 A: 1Password Service Account 패턴 (추천 — 평문 토큰 디스크에 X)
+
 ```bash
 pnpm install
+docker compose up -d                # Postgres
+./scripts/start.sh                  # runtime + dashboard, op://로 시크릿 주입
+./scripts/status.sh                 # 상태 확인
+./scripts/stop.sh                   # 종료
+```
+
+`.env.1p`에 `op://mini-server/...` 참조만 두고, 시작 시 op CLI가 자동으로 실제 값으로 치환.
+
+서버 재부팅 시 자동 시작:
+```bash
+sudo bash scripts/install-systemd.sh
+sudo systemctl start rego-agent
+journalctl -u rego-agent -f         # 로그
+```
+
+### 옵션 B: 평문 .env (간단)
+
+```bash
 cp .env.example .env       # 토큰 채우기
-pnpm db:push               # Postgres 마이그레이션
-pnpm seed                  # 데모 데이터 (선택)
-pnpm dev                   # runtime + dashboard 동시 실행
-# → http://localhost:3000 (대시보드)
-# → http://localhost:3001 (런타임 API)
+pnpm db:push
+pnpm seed
+pnpm dev
 ```
 
 ## 1주차 동작
