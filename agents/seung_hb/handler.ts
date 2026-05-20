@@ -51,8 +51,17 @@ export default defineHandler({
       event.text.slice(0, 280) + (event.text.length > 280 ? '…' : ''),
     ];
     const hasQuestion = event.text.includes('?') || event.text.includes('？');
-    if (hasQuestion) lines.push(``, `_읽고 답변해주세요._`);
-    else if (reason) lines.push(``, `_${reason}_`);
+    const hasExclamation = event.text.includes('!') || event.text.includes('！');
+    const hasPeriod = event.text.includes('.');
+
+    if (hasQuestion) {
+      lines.push(``, `_읽고 답변해주세요._`);
+    } else if (hasExclamation || hasPeriod) {
+      lines.push(``, `_공유 사항입니다. 읽어주세요._`);
+      if (hasExclamation) lines.push(`_중요할지도 모르는 공유 사항입니다!_`);
+    } else if (reason) {
+      lines.push(``, `_${reason}_`);
+    }
     if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
 
     await ctx.tools['telegram.send']!({
