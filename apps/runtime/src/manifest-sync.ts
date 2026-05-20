@@ -1,8 +1,67 @@
 import { eq } from 'drizzle-orm';
-import { getDb, agents } from '@rego/db';
+import { getDb, agents, telegramPending } from '@rego/db';
+import { desc } from 'drizzle-orm';
 import type { AgentManifest } from '@rego/runtime-sdk';
 import type { LoadedAgent } from './agent-registry.js';
 import { audit } from './audit.js';
+
+/**
+ * 폴더로 로드된 에이전트를 DB agents 테이블에 upsert.
+ * 폴더 = DB row 동기화 → /start 시 chat_id 매핑이 정상 동작.
+ * 이미 등록된 telegram_chat_id는 건드리지 않음 (보존).
+ *
+ * 또한 폴더가 /start보다 늦게 생겼을 수도 있으니, telegram_pending에
+ * 먼저 들어온 등록 건이 있으면 그 chat_id를 끌어와서 매핑.
+ */
+export async function ensureAgentRow(agent: LoadedAgent): Promise<void> {
+  const db = getDb();
+  const m = agent.manifest;
+
+  await db
+    .insert(agents)
+    .values({
+      name: m.name,
+      displayName: m.displayName ?? m.name,
+      description: m.description,
+      icon: m.icon,
+      color: m.color,
+      githubHandle: m.githubHandle ?? null,
+      currentManifest: m,
+    })
+    .onConflictDoUpdate({
+      target: agents.name,
+      set: {
+        displayName: m.displayName ?? m.name,
+        description: m.description,
+        icon: m.icon,
+        color: m.color,
+        currentManifest: m,
+        updatedAt: new Date(),
+        // telegramChatId는 의도적으로 제외 (기존 등록 보존)
+      },
+    });
+
+  // 폴더가 /start 이후에 생긴 경우: pending에 쌓인 chat_id를 끌어와 매핑
+  const [row] = await db.select().from(agents).where(eq(agents.name, m.name));
+  if (row && !row.telegramChatId) {
+    const [pending] = await db
+      .select()
+      .from(telegramPending)
+      .where(eq(telegramPending.agentName, m.name))
+      .orderBy(desc(telegramPending.createdAt))
+      .limit(1);
+    if (pending) {
+      await db
+        .update(agents)
+        .set({
+          telegramChatId: pending.chatId,
+          telegramUsername: pending.username ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(agents.name, m.name));
+    }
+  }
+}
 
 /**
  * 사용자가 코드에서 사용한 도구를 추론하고 manifest.tools에 자동 추가.

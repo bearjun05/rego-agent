@@ -3,7 +3,7 @@ import { env } from '../env.js';
 import { createLogger } from '../logger.js';
 import { reloadAll } from '../agent-registry.js';
 import { getEventBus } from '../event-bus.js';
-import { syncManifestToolsForAgent } from '../manifest-sync.js';
+import { syncManifestToolsForAgent, ensureAgentRow } from '../manifest-sync.js';
 import { listAgents } from '../agent-registry.js';
 
 const log = createLogger('webhook:github');
@@ -71,6 +71,7 @@ export function createGithubRouter() {
         try {
           await reloadAll();
           for (const a of listAgents()) {
+            await ensureAgentRow(a); // 새 폴더 → DB row 동기화
             await syncManifestToolsForAgent(a);
           }
         } catch (err) {

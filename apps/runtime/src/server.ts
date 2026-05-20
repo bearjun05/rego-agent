@@ -9,7 +9,7 @@ import { serve } from '@hono/node-server';
 import { env } from './env.js';
 import { createLogger } from './logger.js';
 import { loadAllAgents, listAgents } from './agent-registry.js';
-import { syncManifestToolsForAgent } from './manifest-sync.js';
+import { syncManifestToolsForAgent, ensureAgentRow } from './manifest-sync.js';
 import { createSlackRouter } from './webhooks/slack.js';
 import { createTelegramRouter } from './webhooks/telegram.js';
 import { createGithubRouter } from './webhooks/github.js';
@@ -67,13 +67,14 @@ async function main() {
     port: cfg.RUNTIME_PORT,
   });
 
-  // Load agents + sync manifests
+  // Load agents + DB upsert + sync manifests
   await loadAllAgents();
   for (const a of listAgents()) {
     try {
+      await ensureAgentRow(a); // 폴더 → DB row 동기화 (chat_id 매핑 가능하게)
       await syncManifestToolsForAgent(a);
     } catch (err) {
-      log.warn(`manifest sync failed for ${a.name}`, err);
+      log.warn(`agent sync failed for ${a.name}`, err);
     }
   }
   log.info(`loaded ${listAgents().length} agents`);

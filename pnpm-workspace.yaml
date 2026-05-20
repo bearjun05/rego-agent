@@ -1,4 +1,5 @@
 packages:
   - "apps/*"
   - "packages/*"
-  - "agents/*"
+  # agents/* 는 workspace 패키지가 아님 — 루트 node_modules에서 @rego/runtime-sdk resolve
+  # (학습자가 폴더 추가해도 pnpm install 재실행 불필요)

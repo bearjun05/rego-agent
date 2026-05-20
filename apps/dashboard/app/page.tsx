@@ -16,8 +16,8 @@ export default function HomePage() {
               SPARTA · AGENT STUDY · WEEK 1
             </div>
             <h1 className="font-display font-extrabold text-5xl lg:text-7xl leading-none tracking-tight">
-              레고처럼<br />
-              <span className="text-rust">조립하는 에이전트.</span>
+              깎아보자<br />
+              <span className="text-rust">너만의 비서를.</span>
             </h1>
           </div>
           <div className="font-mono text-[10px] uppercase text-muted leading-relaxed">
