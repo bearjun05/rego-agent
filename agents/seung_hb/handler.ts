@@ -20,19 +20,26 @@ export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
-    // 1) 분류
-    const { category, confidence, reason } = await ctx.llm.classify({
-      text: event.text,
-      categories: [
-        { id: 'question', description: '답변이 필요한 질문' },
-        { id: 'request', description: '작업 요청' },
-        { id: 'schedule', description: '일정/회의 조율' },
-        { id: 'info', description: '정보 공유, 답변 필요 X' },
-      ],
-      prompt: classifyPrompt,
-    });
+    // 1) 분류 + 요약 병렬 실행
+    const [{ category, confidence, reason }, summaryRaw] = await Promise.all([
+      ctx.llm.classify({
+        text: event.text,
+        categories: [
+          { id: 'question', description: '답변이 필요한 질문' },
+          { id: 'request', description: '작업 요청' },
+          { id: 'schedule', description: '일정/회의 조율' },
+          { id: 'info', description: '정보 공유, 답변 필요 X' },
+        ],
+        prompt: classifyPrompt,
+      }),
+      ctx.llm.generate({
+        prompt: `다음 슬랙 메시지를 2~3문장으로 핵심만 요약해줘. 요약문만 출력하고 다른 말은 하지 마.\n\n${event.text}`,
+      }),
+    ]);
 
-    // 2) 텔레그램 알림 (포맷은 본인이 마음껏 바꾸세요)
+    const summary = typeof summaryRaw === 'string' ? summaryRaw : summaryRaw?.text ?? event.text.slice(0, 280);
+
+    // 2) 텔레그램 알림
     const emoji =
       category === 'question'
         ? '❓'
@@ -48,7 +55,7 @@ export default defineHandler({
       `*from:* ${event.userName ?? event.user}`,
       `*ch:* #${event.channelName ?? event.channel}`,
       ``,
-      event.text.slice(0, 280) + (event.text.length > 280 ? '…' : ''),
+      `*요약:* ${summary}`,
     ];
     const hasQuestion = event.text.includes('?') || event.text.includes('？');
     const hasExclamation = event.text.includes('!') || event.text.includes('！');
