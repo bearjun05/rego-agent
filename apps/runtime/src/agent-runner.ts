@@ -110,15 +110,18 @@ export function matchAgentsForEvent(event: AgentEvent, ownMentionsOnly = true): 
 // ─────────────────────────────────────────────────────────
 // Context 생성
 // ─────────────────────────────────────────────────────────
-async function createContext(agent: LoadedAgent, runId: string): Promise<AgentContext> {
+async function createContext(
+  agent: LoadedAgent,
+  runId: string,
+  chatId: string | null | undefined,
+): Promise<AgentContext> {
   const cfg = env();
   const logger = createLogger(`agent:${agent.name}`);
   const tools = getAllToolsForAgent(agent);
 
-  // 사람의 chat_id 조회 (telegram.send 자동 주입용)
+  // chat_id(telegram.send 자동 주입용)는 호출자(runAgentForEvent)가 pause 체크 때
+  // 이미 조회한 agents row에서 넘겨준다 — 같은 row 중복 쿼리 제거.
   const db = getDb();
-  const [row] = await db.select().from(agents).where(eq(agents.name, agent.name));
-  const chatId = row?.telegramChatId;
 
   // 카운터
   let llmCallCount = 0;
@@ -419,8 +422,8 @@ export async function runAgentForEvent(
     };
   }
 
-  // ctx 생성
-  const ctx = await createContext(agent, runId);
+  // ctx 생성 (pause 체크에서 가져온 row의 chat_id 재사용 — 중복 조회 방지)
+  const ctx = await createContext(agent, runId, row?.telegramChatId);
 
   // timeout 처리
   let timedOut = false;

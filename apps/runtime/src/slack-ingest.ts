@@ -1,0 +1,91 @@
+import { getDb, slackMentions } from '@rego/db';
+import type { SlackMentionEvent } from '@rego/runtime-sdk';
+import { getEventBus } from './event-bus.js';
+import { createLogger } from './logger.js';
+import { matchAgentsForEvent, runAgentForEvent } from './agent-runner.js';
+import { mentionDedupeKey } from './helpers/slack-events.js';
+
+const log = createLogger('slack-ingest');
+
+export interface IngestOptions {
+  /** 수신 경로 — 관측/dedup 디버깅용 */
+  source: 'forward' | 'poll';
+  eventId?: string | null;
+  teamId?: string;
+  raw?: unknown;
+}
+
+export interface IngestResult {
+  ingested: boolean;
+  mentionId?: number;
+  matched: number;
+}
+
+/**
+ * Slack 멘션을 DB에 기록(중복 제거)하고, 매칭 에이전트를 실행한다.
+ * Tier1(webhook 포워딩)과 Tier2(폴링)가 공유하는 단일 진입점.
+ *
+ * dedup: (channel, ts) 유니크. 이미 있으면 ingested=false 로 조기 종료(에이전트 미실행).
+ */
+export async function ingestSlackMention(
+  event: SlackMentionEvent,
+  opts: IngestOptions,
+): Promise<IngestResult> {
+  const db = getDb();
+  const bus = getEventBus();
+  const key = mentionDedupeKey(event.channel, event.ts);
+
+  let mentionId: number | undefined;
+  try {
+    const inserted = await db
+      .insert(slackMentions)
+      .values({
+        eventId: opts.eventId ?? null,
+        teamId: opts.teamId,
+        channel: event.channel,
+        channelName: event.channelName,
+        user: event.user,
+        userName: event.userName,
+        ts: event.ts,
+        threadTs: event.threadTs,
+        text: event.text,
+        permalink: event.permalink,
+        source: opts.source,
+        raw: opts.raw ?? event.raw,
+      })
+      .onConflictDoNothing({ target: [slackMentions.channel, slackMentions.ts] })
+      .returning({ id: slackMentions.id });
+
+    if (inserted.length === 0) {
+      log.info(`duplicate ${key} (source=${opts.source}) — skip`);
+      return { ingested: false, matched: 0 };
+    }
+    mentionId = inserted[0]?.id;
+  } catch (err) {
+    log.error(`failed to record mention ${key}`, err);
+    return { ingested: false, matched: 0 };
+  }
+
+  await bus.publish({
+    type: 'slack.mention.received',
+    payload: {
+      mentionId,
+      source: opts.source,
+      text: event.text,
+      channelName: event.channelName,
+      userName: event.userName,
+    },
+  });
+
+  const matched = matchAgentsForEvent(event, true);
+  log.info(`mention ${key} matched ${matched.length} agents (source=${opts.source})`);
+
+  for (const agent of matched) {
+    runAgentForEvent(agent, event, {
+      sourceSlackMentionId: mentionId,
+      triggeredBy: 'real',
+    }).catch((e) => log.error(`agent ${agent.name} run failed`, e));
+  }
+
+  return { ingested: true, mentionId, matched: matched.length };
+}

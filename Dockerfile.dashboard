@@ -1,12 +1,11 @@
 # ─────────────────────────────────────────────────────────
-# rego-agent runtime — Railway 배포 (Hono API + webhooks)
-# tsx로 TS 소스를 직접 실행 (workspace 패키지들이 src/*.ts를 export)
+# rego-agent dashboard — Railway 배포 (Next.js 14)
 # ─────────────────────────────────────────────────────────
 FROM node:20-slim AS base
 RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
 WORKDIR /app
 
-# ── deps: lockfile 기준 재현 가능한 설치 (dev deps 포함 — tsx 필요) ──
+# ── deps ──
 FROM base AS deps
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc turbo.json ./
 COPY apps/runtime/package.json ./apps/runtime/
@@ -17,12 +16,21 @@ COPY packages/db/package.json ./packages/db/
 COPY agents/_template/package.json ./agents/_template/
 RUN pnpm install --frozen-lockfile --prefer-offline
 
-# ── runtime: deps 트리(workspace symlink 포함) + 소스 ──
-# .dockerignore가 node_modules/.env/빌드산출물을 제외하므로
-# `COPY . .`가 deps의 node_modules를 덮어쓰지 않음 (pnpm symlink 보존)
+# ── build: next build ──
+# next.config.mjs의 rewrites()는 빌드 시점에 평가되므로 RUNTIME_URL을
+# build ARG로 받아 프록시 대상이 정확히 구워지게 함.
+# (Railway는 서비스 변수를 빌드 ARG로 전달 — dashboard 서비스에 RUNTIME_URL 설정 필요)
+FROM deps AS build
+ARG RUNTIME_URL
+ENV RUNTIME_URL=${RUNTIME_URL}
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY . .
+RUN pnpm --filter @rego/dashboard build
+
+# ── runtime: next start ──
 FROM base AS runtime
 ENV NODE_ENV=production
-COPY --from=deps /app /app
-COPY . .
-# Railway가 PORT를 동적 주입 → server.ts가 process.env.PORT 사용 (EXPOSE 불필요)
-CMD ["pnpm", "--filter", "@rego/runtime", "exec", "tsx", "src/server.ts"]
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=build /app /app
+# Railway가 PORT 주입. next start는 0.0.0.0 바인딩(공개 트래픽 수신).
+CMD ["sh", "-c", "pnpm --filter @rego/dashboard exec next start -p ${PORT:-3000}"]

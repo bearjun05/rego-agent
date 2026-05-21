@@ -10,6 +10,7 @@ import {
   telegramMessages,
   smokeRuns,
   auditLogs,
+  slackUserTokens,
 } from '@rego/db';
 import { listAgents, getAgent } from '../agent-registry.js';
 import { audit } from '../audit.js';
@@ -95,11 +96,25 @@ export function createAgentsApi() {
       .from(llmCalls)
       .where(eq(llmCalls.agentName, name));
 
+    // Tier2 Slack 연결 여부 (비공개 채널 폴링 옵트인 상태)
+    const [tokenRow] = await db
+      .select({ id: slackUserTokens.id })
+      .from(slackUserTokens)
+      .where(and(eq(slackUserTokens.agentName, name), eq(slackUserTokens.revoked, false)));
+
+    // Tier2 옵트인 OAuth 시작 URL (runtime 공개 URL 기준). 미설정 시 null.
+    const slackOAuthUrl =
+      process.env.SLACK_CLIENT_ID && process.env.SLACK_OAUTH_REDIRECT
+        ? `${process.env.PUBLIC_BASE_URL ?? ''}/oauth/slack?agent=${encodeURIComponent(name)}`
+        : null;
+
     return c.json({
       agent: {
         ...row,
         loaded: !!loaded,
         manifest: loaded?.manifest ?? row.currentManifest,
+        slackConnected: !!tokenRow,
+        slackOAuthUrl,
       },
       recentRuns,
       totalCostUsd: parseFloat(costRow?.cost ?? '0'),

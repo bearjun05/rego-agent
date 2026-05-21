@@ -1,12 +1,16 @@
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
 import { verifySlackSignature, SlackClient } from '@rego/tools/slack';
-import { getDb, slackMentions } from '@rego/db';
 import type { SlackMentionEvent } from '@rego/runtime-sdk';
 import { env } from '../env.js';
-import { getEventBus } from '../event-bus.js';
 import { createLogger } from '../logger.js';
-import { matchAgentsForEvent, runAgentForEvent } from '../agent-runner.js';
+import {
+  shouldProcessSlackEvent,
+  isChannelAllowed,
+  parseChannelAllowlist,
+  type RawSlackEvent,
+} from '../helpers/slack-events.js';
+import { resolveUserName, resolveChannelName } from '../helpers/slack-meta-cache.js';
+import { ingestSlackMention } from '../slack-ingest.js';
 
 const log = createLogger('webhook:slack');
 
@@ -15,16 +19,7 @@ interface SlackEventPayload {
   challenge?: string;
   team_id?: string;
   event_id?: string;
-  event?: {
-    type: string;
-    text?: string;
-    channel?: string;
-    user?: string;
-    ts?: string;
-    thread_ts?: string;
-    item?: { type: string; channel: string; ts: string };
-    reaction?: string;
-  };
+  event?: RawSlackEvent;
 }
 
 export function createSlackRouter() {
@@ -32,17 +27,14 @@ export function createSlackRouter() {
 
   router.post('/', async (c) => {
     const cfg = env();
-    const signingSecret = cfg.SLACK_SIGNING_SECRET;
-
     const raw = await c.req.text();
-    const signature = c.req.header('x-slack-signature') ?? '';
-    const timestamp = c.req.header('x-slack-request-timestamp') ?? '';
 
-    if (signingSecret) {
+    // 1) 서명 검증 (signing secret 있으면)
+    if (cfg.SLACK_SIGNING_SECRET) {
       const valid = await verifySlackSignature({
-        signingSecret,
-        signature,
-        timestamp,
+        signingSecret: cfg.SLACK_SIGNING_SECRET,
+        signature: c.req.header('x-slack-signature') ?? '',
+        timestamp: c.req.header('x-slack-request-timestamp') ?? '',
         body: raw,
       });
       if (!valid) {
@@ -60,21 +52,27 @@ export function createSlackRouter() {
       return c.json({ error: 'invalid json' }, 400);
     }
 
-    // URL verification challenge
+    // 2) URL verification challenge (Event Subscriptions 등록 시)
     if (payload.type === 'url_verification') {
       return c.json({ challenge: payload.challenge });
+    }
+
+    // 3) Slack 재시도(3초 내 미응답 시)는 즉시 200으로 흘려보냄 — 중복 처리 방지.
+    //    (원 이벤트는 이미 비동기로 처리 중이거나 event_id dedup으로 막힘)
+    const retryNum = c.req.header('x-slack-retry-num');
+    if (retryNum) {
+      log.info(`retry #${retryNum} ignored (${c.req.header('x-slack-retry-reason') ?? ''})`);
+      return c.json({ ok: true });
     }
 
     if (payload.type !== 'event_callback' || !payload.event) {
       return c.json({ ok: true });
     }
 
-    const event = payload.event;
-    log.info(`event: ${event.type}`);
-
-    // 비동기로 처리 (Slack은 3초 내 응답 필요)
-    queueMicrotask(() => handleSlackEvent(payload).catch((err) => log.error('handler failed', err)));
-
+    // 4) Slack은 3초 내 응답을 요구 → 즉시 200, 처리는 비동기
+    queueMicrotask(() =>
+      handleSlackEvent(payload).catch((err) => log.error('handler failed', err)),
+    );
     return c.json({ ok: true });
   });
 
@@ -83,96 +81,60 @@ export function createSlackRouter() {
 
 async function handleSlackEvent(payload: SlackEventPayload) {
   const event = payload.event!;
-  const db = getDb();
-  const bus = getEventBus();
   const cfg = env();
 
-  if (event.type === 'app_mention' || (event.type === 'message' && event.text?.includes('<@'))) {
-    if (!event.text || !event.channel || !event.user || !event.ts) return;
+  // 처리 대상 판정 (subtype/봇/본인/멘션 유무) — 순수 함수
+  const decision = shouldProcessSlackEvent(event, { botUserId: cfg.SLACK_BOT_USER_ID });
+  if (!decision.process) {
+    log.debug(`skip ${event.type}: ${decision.reason}`);
+    return;
+  }
+  log.info(`event ${event.type}: ${decision.reason}`);
 
-    // dedup via event_id
-    const eventId = payload.event_id;
+  // 메타데이터 enrich (user/channel 이름은 캐시, permalink만 매번)
+  let userName: string | undefined;
+  let channelName: string | undefined;
+  let permalink: string | undefined;
 
-    // 사용자/채널 이름 조회 (best-effort)
-    let userName: string | undefined;
-    let channelName: string | undefined;
-    let permalink: string | undefined;
-
-    if (cfg.SLACK_BOT_TOKEN) {
-      try {
-        const slack = new SlackClient(cfg.SLACK_BOT_TOKEN);
-        const [userInfo, chanInfo] = await Promise.all([
-          slack.usersInfo({ user: event.user }).catch(() => null),
-          slack.conversationsInfo({ channel: event.channel }).catch(() => null),
-        ]);
-        userName =
-          userInfo?.user.profile?.display_name ||
-          userInfo?.user.real_name ||
-          userInfo?.user.name;
-        channelName = chanInfo?.channel.name;
-        const pl = await slack.getPermalink({ channel: event.channel, message_ts: event.ts });
-        permalink = pl.permalink;
-      } catch (err) {
-        log.warn('failed to enrich slack metadata', err);
-      }
-    }
-
-    // 멘션 텍스트에서 user id 패턴을 user_name으로 치환 (있다면)
-    const textResolved = event.text;
-
-    // DB 저장
-    let mentionId: number | undefined;
+  if (cfg.SLACK_BOT_TOKEN) {
+    const slack = new SlackClient(cfg.SLACK_BOT_TOKEN);
+    [userName, channelName] = await Promise.all([
+      resolveUserName(slack, event.user!),
+      resolveChannelName(slack, event.channel!),
+    ]);
     try {
-      const [row] = await db
-        .insert(slackMentions)
-        .values({
-          eventId: eventId ?? null,
-          teamId: payload.team_id,
-          channel: event.channel,
-          channelName,
-          user: event.user,
-          userName,
-          ts: event.ts,
-          threadTs: event.thread_ts,
-          text: textResolved,
-          permalink,
-          raw: payload,
-        })
-        .onConflictDoNothing()
-        .returning();
-      mentionId = row?.id;
+      const pl = await slack.getPermalink({ channel: event.channel!, message_ts: event.ts! });
+      permalink = pl.permalink;
     } catch (err) {
-      log.error('failed to record mention', err);
-    }
-
-    // 이벤트로 변환
-    const agentEvent: SlackMentionEvent = {
-      type: 'slack.mention',
-      text: textResolved,
-      channel: event.channel,
-      channelName,
-      user: event.user,
-      userName,
-      ts: event.ts,
-      threadTs: event.thread_ts,
-      permalink,
-      raw: payload,
-    };
-
-    await bus.publish({
-      type: 'slack.mention.received',
-      payload: { mentionId, text: textResolved, channelName, userName },
-    });
-
-    // 매칭되는 모든 agent 실행 (사용자가 정책 자유 정의)
-    const matched = matchAgentsForEvent(agentEvent, true);
-    log.info(`mention matched ${matched.length} agents`);
-
-    for (const agent of matched) {
-      runAgentForEvent(agent, agentEvent, {
-        sourceSlackMentionId: mentionId,
-        triggeredBy: 'real',
-      }).catch((err) => log.error(`agent ${agent.name} run failed`, err));
+      log.warn('failed to get permalink', err);
     }
   }
+
+  // 감시 채널 allowlist (비어있으면 전체 허용)
+  const allowlist = parseChannelAllowlist(cfg.SLACK_MONITOR_CHANNELS);
+  if (!isChannelAllowed(event.channel, channelName, allowlist)) {
+    log.debug(`skip: channel ${channelName ?? event.channel} not in allowlist`);
+    return;
+  }
+
+  const agentEvent: SlackMentionEvent = {
+    type: 'slack.mention',
+    text: event.text!,
+    channel: event.channel!,
+    channelName,
+    user: event.user!,
+    userName,
+    ts: event.ts!,
+    threadTs: event.thread_ts,
+    permalink,
+    raw: payload,
+  };
+
+  // 저장(dedup: channel+ts) + 매칭 에이전트 실행 — Tier1/Tier2 공유 진입점.
+  await ingestSlackMention(agentEvent, {
+    source: 'forward',
+    eventId: payload.event_id ?? null,
+    teamId: payload.team_id,
+    raw: payload,
+  });
 }

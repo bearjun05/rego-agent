@@ -1,9 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
-import { eq } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { getDb, agents } from '@rego/db';
+import { getDb, agents, kvState } from '@rego/db';
 import { callOpenRouter, extractJson } from '@rego/tools/llm';
 import type { LoadedAgent } from './agent-registry.js';
 import { env } from './env.js';
@@ -11,6 +12,8 @@ import { createLogger } from './logger.js';
 import { getEventBus } from './event-bus.js';
 
 const log = createLogger('analyzer');
+// 코드 변경 없으면 LLM 분석을 건너뛰기 위한 해시 캐시 (kv_state, 시스템 namespace)
+const ANALYZER_NS = '__analyzer__';
 
 const AnalysisSchema = z.object({
   summary: z.string(),
@@ -25,7 +28,11 @@ type Analysis = z.infer<typeof AnalysisSchema>;
  *
  * push 후 변경된 에이전트에 대해 호출됨 (github webhook).
  */
-export async function analyzeAgent(agent: LoadedAgent, commitSha: string): Promise<void> {
+export async function analyzeAgent(
+  agent: LoadedAgent,
+  commitSha: string,
+  opts: { force?: boolean } = {},
+): Promise<void> {
   const cfg = env();
   if (!cfg.OPENROUTER_API_KEY) {
     log.warn('OPENROUTER_API_KEY 없음 — 분석 스킵');
@@ -34,6 +41,24 @@ export async function analyzeAgent(agent: LoadedAgent, commitSha: string): Promi
 
   const code = await collectAgentCode(agent.folderPath);
   if (!code) return;
+
+  // 코드 내용이 직전 분석과 동일하면 LLM 호출 생략 (idempotent — 재배포/재부팅 비용 절감)
+  const hash = createHash('sha256').update(code).digest('hex');
+  const db0 = getDb();
+  if (!opts.force) {
+    try {
+      const [prev] = await db0
+        .select({ value: kvState.value })
+        .from(kvState)
+        .where(and(eq(kvState.agentName, ANALYZER_NS), eq(kvState.key, agent.name)));
+      if ((prev?.value as { hash?: string } | undefined)?.hash === hash) {
+        log.debug(`분석 스킵(변경없음): ${agent.name}`);
+        return;
+      }
+    } catch {
+      /* kv 조회 실패 시 그냥 분석 진행 */
+    }
+  }
 
   const system = [
     '너는 코드 리뷰어야. 비개발자 학습자가 만든 슬랙 멘션 처리 AI 에이전트 코드를 보고,',
@@ -72,6 +97,15 @@ export async function analyzeAgent(agent: LoadedAgent, commitSha: string): Promi
       })
       .where(eq(agents.name, agent.name));
 
+    // 분석 완료 해시 저장 → 다음 분석 때 변경 없으면 스킵
+    await db
+      .insert(kvState)
+      .values({ agentName: ANALYZER_NS, key: agent.name, value: { hash, commitSha } })
+      .onConflictDoUpdate({
+        target: [kvState.agentName, kvState.key],
+        set: { value: { hash, commitSha }, updatedAt: new Date() },
+      });
+
     await getEventBus().publish({
       type: 'agent.analyzed',
       agentName: agent.name,
@@ -85,6 +119,24 @@ export async function analyzeAgent(agent: LoadedAgent, commitSha: string): Promi
     log.info(`분석 완료: ${agent.name}`, { summary: parsed.summary.slice(0, 60) });
   } catch (err) {
     log.error(`분석 실패: ${agent.name}`, err);
+  }
+}
+
+/**
+ * 부팅 시 호출 — 변경된(코드 해시가 다른) 에이전트만 AI 분석.
+ * Railway 재배포 모델에서 "새로 배포된 컨테이너가 최신 코드를 분석"하는 경로.
+ * 변경 없는 에이전트는 해시 비교로 LLM 호출 없이 즉시 스킵된다.
+ */
+export async function analyzeAllStale(
+  agentsList: LoadedAgent[],
+  commitSha: string,
+): Promise<void> {
+  for (const a of agentsList) {
+    try {
+      await analyzeAgent(a, commitSha);
+    } catch (err) {
+      log.error(`부팅 분석 실패: ${a.name}`, err);
+    }
   }
 }
 

@@ -5,6 +5,20 @@ const EnvSchema = z.object({
   SLACK_SIGNING_SECRET: z.string().optional(),
   SLACK_BOT_TOKEN: z.string().optional(),
   SLACK_APP_ID: z.string().optional(),
+  /** 봇 자신의 user id (U…) — self-message 무시용 (선택, bot_id 필터가 1차 방어) */
+  SLACK_BOT_USER_ID: z.string().optional(),
+  /** 감시할 채널 allowlist (쉼표구분 ID 또는 이름). 비우면 전체 채널 */
+  SLACK_MONITOR_CHANNELS: z.string().optional(),
+  /** Tier2 OAuth (유저 토큰 발급/회전) — 기존 Slack 앱의 client id/secret */
+  SLACK_CLIENT_ID: z.string().optional(),
+  SLACK_CLIENT_SECRET: z.string().optional(),
+  /** OAuth 콜백 URL (예: https://<rego>/oauth/slack/callback) */
+  SLACK_OAUTH_REDIRECT: z.string().optional(),
+  /** 유저 토큰 암호화 키 (DB 저장 시 aes-256-gcm) */
+  TOKEN_ENC_KEY: z.string().optional(),
+  /** Tier2 폴러 on/off 및 주기(ms) */
+  SLACK_POLL_ENABLED: z.string().optional(),
+  SLACK_POLL_INTERVAL_MS: z.coerce.number().default(45_000),
 
   // Telegram
   TELEGRAM_BOT_TOKEN: z.string().optional(),
@@ -22,10 +36,10 @@ const EnvSchema = z.object({
   // Admin
   ADMIN_PASSWORD: z.string().optional(),
 
-  // Models
-  MODEL_CLASSIFY: z.string().default('anthropic/claude-haiku-4.5'),
-  MODEL_GENERATE: z.string().default('anthropic/claude-sonnet-4.5'),
-  MODEL_CHAT: z.string().default('anthropic/claude-sonnet-4.5'),
+  // Models — OpenRouter deepseek (llm.ts 기본값과 일치)
+  MODEL_CLASSIFY: z.string().default('deepseek/deepseek-v4-flash'),
+  MODEL_GENERATE: z.string().default('deepseek/deepseek-v4-flash'),
+  MODEL_CHAT: z.string().default('deepseek/deepseek-v4-flash'),
 
   // Runtime
   RUNTIME_PORT: z.coerce.number().default(3001),

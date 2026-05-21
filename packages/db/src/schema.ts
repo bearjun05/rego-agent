@@ -179,11 +179,17 @@ export const slackMentions = pgTable(
     text: text('text').notNull(),
     permalink: text('permalink'),
     raw: jsonb('raw').$type<unknown>(),
+    /** 수신 경로: 'forward'(Tier1 second-brain 포워딩) | 'poll'(Tier2 유저토큰 폴링) */
+    source: text('source').notNull().default('forward'),
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    eventIdx: uniqueIndex('slack_mentions_event_uniq').on(t.eventId),
+    // dedup은 (channel, ts) 단일 유니크로 통일. event_id는 유니크 해제(일반 인덱스).
+    // event_id 유니크 + (channel,ts) 유니크를 둘 다 두면 타깃 onConflict가 다른 인덱스
+    // 충돌을 못 잡아 INSERT가 throw됨. Slack 메시지 정체성 = (channel, ts).
+    eventIdx: index('slack_mentions_event_idx').on(t.eventId),
     tsIdx: index('slack_mentions_ts_idx').on(t.ts),
+    channelTsUniq: uniqueIndex('slack_mentions_channel_ts_uniq').on(t.channel, t.ts),
   }),
 );
 
@@ -334,6 +340,45 @@ export const chatMessages = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────
+// slack_user_tokens — Tier2 유저 OAuth 토큰 (암호화 저장)
+// ─────────────────────────────────────────────────────────
+export const slackUserTokens = pgTable(
+  'slack_user_tokens',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    agentName: text('agent_name').notNull(),
+    slackUserId: text('slack_user_id').notNull(),
+    accessTokenEnc: text('access_token_enc').notNull(), // enc(access token)
+    refreshTokenEnc: text('refresh_token_enc'), // enc(refresh) — 회전 시
+    expiresAt: timestamp('expires_at', { withTimezone: true }), // null = 무만료
+    scopes: text('scopes'),
+    revoked: boolean('revoked').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userUniq: uniqueIndex('slack_user_tokens_user_uniq').on(t.slackUserId),
+    agentIdx: index('slack_user_tokens_agent_idx').on(t.agentName),
+  }),
+);
+
+// ─────────────────────────────────────────────────────────
+// slack_poll_cursors — Tier2 폴링 커서 (유저×채널별 마지막 ts)
+// ─────────────────────────────────────────────────────────
+export const slackPollCursors = pgTable(
+  'slack_poll_cursors',
+  {
+    slackUserId: text('slack_user_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    lastTs: text('last_ts').notNull().default('0'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: uniqueIndex('slack_poll_cursors_pk').on(t.slackUserId, t.channelId),
+  }),
+);
+
+// ─────────────────────────────────────────────────────────
 // Inferred types
 // ─────────────────────────────────────────────────────────
 export type Agent = typeof agents.$inferSelect;
@@ -348,3 +393,5 @@ export type SmokeRunRow = typeof smokeRuns.$inferSelect;
 export type FixtureRow = typeof fixtures.$inferSelect;
 export type AuditLogRow = typeof auditLogs.$inferSelect;
 export type ChatMessageRow = typeof chatMessages.$inferSelect;
+export type SlackUserTokenRow = typeof slackUserTokens.$inferSelect;
+export type SlackPollCursorRow = typeof slackPollCursors.$inferSelect;

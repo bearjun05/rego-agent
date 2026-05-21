@@ -9,7 +9,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getDb, agents, inArray } from '@rego/db';
+import { getDb, agents, inArray, sql } from '@rego/db';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 
@@ -20,6 +20,8 @@ interface RosterEntry {
   email: string;
   icon: string;
   color: string;
+  /** 슬랙 멘션 라우팅 키(<@U…>의 U…). 있으면 시드, 없으면 기존 DB 값 보존 */
+  slackUserId?: string;
 }
 
 // 폴더 slug별 텔레그램 연결 (현재 최웅준만 보유)
@@ -50,6 +52,7 @@ async function main() {
       githubHandle: r.github,
       telegramChatId: tg?.chatId ?? null,
       telegramUsername: tg?.username ?? null,
+      slackUserId: r.slackUserId ?? null,
       icon: r.icon,
       color: r.color,
       description: desc,
@@ -63,8 +66,11 @@ async function main() {
         set: {
           displayName: row.displayName,
           githubHandle: row.githubHandle,
-          telegramChatId: row.telegramChatId,
-          telegramUsername: row.telegramUsername,
+          // 매핑(텔레그램/슬랙)은 비파괴적: roster/시드에 값이 없으면 기존 DB 값 보존.
+          // (이전엔 무조건 덮어써서 /start로 등록된 chat_id가 null로 날아갔음)
+          telegramChatId: sql`coalesce(${row.telegramChatId}, ${agents.telegramChatId})`,
+          telegramUsername: sql`coalesce(${row.telegramUsername}, ${agents.telegramUsername})`,
+          slackUserId: sql`coalesce(${row.slackUserId}, ${agents.slackUserId})`,
           icon: row.icon,
           color: row.color,
           description: row.description,
