@@ -80,8 +80,15 @@ export class SlackClient {
   }
 
   conversationsHistory(opts: { channel: string; limit?: number; oldest?: string }) {
-    return this.call<{ messages: Array<{ ts: string; text: string; user: string }> }>(
-      'conversations.history',
+    return this.call<{
+      messages: Array<{ ts: string; text?: string; user?: string; subtype?: string }>;
+    }>('conversations.history', opts);
+  }
+
+  /** 토큰 소유자가 속한 대화 목록 (Tier2 폴링: 비공개 채널 열거에 사용). 유저 토큰 권장. */
+  usersConversations(opts: { types?: string; limit?: number; exclude_archived?: boolean }) {
+    return this.call<{ channels: Array<{ id: string; name?: string; is_private?: boolean }> }>(
+      'users.conversations',
       opts,
     );
   }

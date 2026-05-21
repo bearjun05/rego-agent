@@ -1,0 +1,44 @@
+# 빌드 컨텍스트에서 제외 — 시크릿 누설 차단 + 재현성/속도
+# (Dockerfile은 package.json들을 먼저 복사해 deps 스테이지에서 pnpm install 하므로
+#  로컬 node_modules / 빌드 산출물은 절대 이미지에 들어가면 안 됨)
+
+# 의존성 (deps 스테이지에서 새로 설치)
+node_modules
+**/node_modules
+.pnpm-store
+
+# 시크릿 / 환경 — .env.example만 허용
+.env
+.env.*
+.env.1p
+!.env.example
+
+# 빌드 산출물 / 캐시
+**/dist
+**/.next
+**/.turbo
+.turbo
+**/*.tsbuildinfo
+coverage
+
+# VCS / 에디터 / 메타
+.git
+.gitignore
+.github
+.husky
+.vscode
+.idea
+.DS_Store
+
+# 로컬 데이터 / 로그
+data
+*.sqlite
+*.sqlite-journal
+*.db
+**/*.log
+
+# 운영자 전용 (런타임 불필요)
+.claude
+docs
+WAKEUP.md
+README.md

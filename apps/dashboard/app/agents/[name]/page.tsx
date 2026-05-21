@@ -20,6 +20,8 @@ interface AgentDetail {
     techniques: string[] | null;
     analyzedAt: string | null;
     telegramChatId: string | null;
+    slackConnected?: boolean;
+    slackOAuthUrl?: string | null;
     manifest: {
       tools?: string[];
       triggers?: Array<{ type: string; channel?: string; emoji?: string; schedule?: string }>;
@@ -109,6 +111,13 @@ export default function AgentDetailPage() {
             ) : (
               <span className="text-muted">📱 텔레그램 미연결 (/start 필요)</span>
             )}
+            {a.slackConnected ? (
+              <span className="text-moss">🔒 Slack 연결됨 (비공개 채널 포함)</span>
+            ) : a.slackOAuthUrl ? (
+              <a href={a.slackOAuthUrl} className="text-rust hover:underline">
+                🔒 내 Slack 연결 (비공개 채널도 받기)
+              </a>
+            ) : null}
             {a.isPaused && (
               <span className="bg-rust text-paper px-2 py-0.5 uppercase">⏸ 일시정지</span>
             )}

@@ -1,6 +1,5 @@
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import { getDb, rateLimit, agents } from '@rego/db';
-import { eq } from 'drizzle-orm';
 import { audit } from './audit.js';
 import { env } from './env.js';
 
@@ -12,24 +11,34 @@ function pad(n: number) {
   return n.toString().padStart(2, '0');
 }
 
+/**
+ * 분 단위 window의 호출 카운터를 +1 하고, 임계 초과 시 차단기를 작동시킨다.
+ *
+ * 파라미터라이즈드 upsert + RETURNING으로 한 쿼리에 처리(이전엔 sql.raw 문자열
+ * 보간 = SQL injection 표면 + INSERT/SELECT 2쿼리였음).
+ */
 export async function incrementCalls(agentName: string, type: 'tool' | 'llm') {
   const db = getDb();
   const window = currentWindow();
-
-  // upsert + increment ("window"는 Postgres 예약어라 따옴표 필수)
-  const incCol = type === 'llm' ? 'llm_count' : 'calls_count';
-  await db.execute(sql.raw(`
-    INSERT INTO rate_limit (agent_name, "window", calls_count, llm_count)
-    VALUES ('${agentName.replace(/'/g, "''")}', '${window}', ${type === 'llm' ? 0 : 1}, ${type === 'llm' ? 1 : 0})
-    ON CONFLICT (agent_name, "window")
-    DO UPDATE SET ${incCol} = rate_limit.${incCol} + 1
-  `));
-
   const cfg = env();
-  // 현재 count 가져오기
-  const [row] = await db.select().from(rateLimit).where(
-    sql`${rateLimit.agentName} = ${agentName} AND ${rateLimit.window} = ${window}`,
-  );
+
+  const [row] = await db
+    .insert(rateLimit)
+    .values({
+      agentName,
+      window,
+      callsCount: type === 'tool' ? 1 : 0,
+      llmCount: type === 'llm' ? 1 : 0,
+    })
+    .onConflictDoUpdate({
+      target: [rateLimit.agentName, rateLimit.window],
+      set:
+        type === 'tool'
+          ? { callsCount: sql`${rateLimit.callsCount} + 1` }
+          : { llmCount: sql`${rateLimit.llmCount} + 1` },
+    })
+    .returning({ callsCount: rateLimit.callsCount, llmCount: rateLimit.llmCount });
+
   if (!row) return;
 
   if (type === 'tool' && row.callsCount >= cfg.RUNAWAY_CALLS_PER_MIN) {

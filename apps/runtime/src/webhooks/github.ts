@@ -193,14 +193,23 @@ export function createGithubRouter() {
         },
       });
 
-      // 0) 폴더 경계 검증 (본인 폴더 밖 수정 시 텔레그램 경고 + audit)
-      // 1) git에서 agents/ 동기화 → 2) reload → 3) DB sync → 4) 변경분 AI 분석
+      // 0) 폴더 경계 검증 (본인 폴더 밖 수정 시 텔레그램 경고 + audit) — 항상 수행
       queueMicrotask(async () => {
         try {
           await warnOutOfFolder(validatePushFolders(payload.commits ?? []));
         } catch (err) {
           log.error('folder validation failed', err);
         }
+
+        // Railway: 코드 반영은 네이티브 재배포가 담당한다. 이 webhook은 재배포 전
+        // 구버전 컨테이너에 도착하므로 여기서 git pull/reload/analyze를 하면 옛 코드를
+        // 분석하게 된다. → analyze는 새로 배포된 컨테이너 부팅 시점(analyzeAllStale)에서 수행.
+        if (process.env.RAILWAY_ENVIRONMENT) {
+          log.info('railway mode: git pull/reload는 네이티브 재배포가 처리 — 경고만 수행');
+          return;
+        }
+
+        // 자체서버: git에서 agents/ 동기화 → reload → DB sync → 변경분 AI 분석
         try {
           const { changed, commit } = await syncAgentsFromGit();
           await reloadAll();
