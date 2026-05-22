@@ -38,6 +38,16 @@ export function maxTs(messages: HistMsg[], fallback: string): string {
   return messages.reduce((mx, m) => (Number(m.ts) > Number(mx) ? m.ts : mx), fallback);
 }
 
+/** Slack ts 포맷의 현재 시각(epoch.micros). 첫 폴링 baseline 커서용. */
+export function nowSlackTs(now: number = Date.now()): string {
+  return (now / 1000).toFixed(6);
+}
+
+/** 커서 없음(채널 첫 조우) 판정 — 첫 조우면 과거 히스토리를 replay하지 않는다 */
+export function isFirstEncounter(cursor: string | null): boolean {
+  return cursor === null;
+}
+
 // ─────────────────────────────────────────────────────────
 // 폴러 서비스 (side-effect)
 // ─────────────────────────────────────────────────────────
@@ -45,13 +55,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
 
-async function getCursor(slackUserId: string, channelId: string): Promise<string> {
+async function getCursor(slackUserId: string, channelId: string): Promise<string | null> {
   const db = getDb();
   const [row] = await db
     .select()
     .from(slackPollCursors)
     .where(and(eq(slackPollCursors.slackUserId, slackUserId), eq(slackPollCursors.channelId, channelId)));
-  return row?.lastTs ?? '0';
+  return row?.lastTs ?? null; // null = 커서 없음(첫 조우)
 }
 
 async function setCursor(slackUserId: string, channelId: string, lastTs: string): Promise<void> {
@@ -77,8 +87,13 @@ async function pollUser(token: string, slackUserId: string): Promise<number> {
   for (const ch of conv.channels ?? []) {
     try {
       const cursor = await getCursor(slackUserId, ch.id);
-      const hist = await slack.conversationsHistory({ channel: ch.id, oldest: cursor, limit: 50 });
-      const fresh = filterNewSince(hist.messages ?? [], cursor); // 커서 경계 메시지 제외(재처리 방지)
+      if (isFirstEncounter(cursor)) {
+        // 첫 조우: 과거 무시, 현재 시각으로 baseline 후 스킵 → 다음 폴부터 "새 멘션만"
+        await setCursor(slackUserId, ch.id, nowSlackTs());
+        continue;
+      }
+      const hist = await slack.conversationsHistory({ channel: ch.id, oldest: cursor!, limit: 50 });
+      const fresh = filterNewSince(hist.messages ?? [], cursor!); // 커서 경계 메시지 제외(재처리 방지)
       const hits = selectMentioning(fresh, slackUserId);
       for (const m of hits) {
         const event: SlackMentionEvent = {
@@ -90,11 +105,12 @@ async function pollUser(token: string, slackUserId: string): Promise<number> {
           ts: m.ts,
           raw: { ...m, _source: 'poll' },
         };
-        const res = await ingestSlackMention(event, { source: 'poll' });
+        // 폴러: 토큰 주인에게만 라우팅(교차발송 차단)
+        const res = await ingestSlackMention(event, { source: 'poll', restrictToSlackUserId: slackUserId });
         if (res.ingested) ingested += 1;
       }
       // 커서 갱신: 이번에 본 메시지의 최신 ts (멘션 없어도 진행 방지)
-      const newest = maxTs(hist.messages ?? [], cursor);
+      const newest = maxTs(hist.messages ?? [], cursor!);
       if (newest !== cursor) await setCursor(slackUserId, ch.id, newest);
       await sleep(200); // 레이트리밋 여유
     } catch (err) {

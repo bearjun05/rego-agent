@@ -13,6 +13,8 @@ export interface IngestOptions {
   eventId?: string | null;
   teamId?: string;
   raw?: unknown;
+  /** 설정 시 그 유저의 에이전트로만 라우팅(폴러 교차발송 차단). 미설정 시 멘션된 전원. */
+  restrictToSlackUserId?: string;
 }
 
 export interface IngestResult {
@@ -77,7 +79,7 @@ export async function ingestSlackMention(
     },
   });
 
-  const matched = matchAgentsForEvent(event, true);
+  const matched = matchAgentsForEvent(event, true, opts.restrictToSlackUserId);
   log.info(`mention ${key} matched ${matched.length} agents (source=${opts.source})`);
 
   for (const agent of matched) {

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { filterNewSince, selectMentioning, maxTs, type HistMsg } from './slack-poller.js';
+import {
+  filterNewSince,
+  selectMentioning,
+  maxTs,
+  nowSlackTs,
+  isFirstEncounter,
+  type HistMsg,
+} from './slack-poller.js';
 
 const msgs: HistMsg[] = [
   { ts: '100.0', text: 'old <@U1>' },
@@ -35,5 +42,18 @@ describe('maxTs', () => {
   });
   it('빈 배열이면 fallback', () => {
     expect(maxTs([], '50.0')).toBe('50.0');
+  });
+});
+
+describe('첫 폴링 baseline (과거 소급 차단)', () => {
+  it('isFirstEncounter: 커서 null이면 true, 값 있으면 false', () => {
+    expect(isFirstEncounter(null)).toBe(true);
+    expect(isFirstEncounter('100.0')).toBe(false);
+    expect(isFirstEncounter('0')).toBe(false);
+  });
+  it('nowSlackTs: epoch.micros 형식이고 과거 커서보다 큼', () => {
+    const ts = nowSlackTs(1779342914208);
+    expect(ts).toMatch(/^\d+\.\d{6}$/);
+    expect(Number(ts) > Number('1700000000.000000')).toBe(true);
   });
 });

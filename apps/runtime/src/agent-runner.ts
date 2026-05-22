@@ -58,7 +58,20 @@ export async function refreshSlackUserMap(): Promise<void> {
   }
 }
 
-export function matchAgentsForEvent(event: AgentEvent, ownMentionsOnly = true): LoadedAgent[] {
+/** 매칭된 에이전트를 토큰 주인(ownerSlug) 하나로 제한 (순수). 폴러 교차라우팅 차단용. */
+export function filterMatchedToOwner(
+  matched: LoadedAgent[],
+  ownerSlug: string | undefined,
+): LoadedAgent[] {
+  if (!ownerSlug) return [];
+  return matched.filter((a) => a.name === ownerSlug);
+}
+
+export function matchAgentsForEvent(
+  event: AgentEvent,
+  ownMentionsOnly = true,
+  restrictToSlackUserId?: string,
+): LoadedAgent[] {
   const all = listAgents();
   const matched: LoadedAgent[] = [];
 
@@ -103,6 +116,11 @@ export function matchAgentsForEvent(event: AgentEvent, ownMentionsOnly = true): 
       matched.push(agent);
       break;
     }
+  }
+
+  // 폴러(Tier2): 토큰 주인에게만 라우팅. 다중멘션 메시지여도 같이 멘션된 남에게 안 감.
+  if (restrictToSlackUserId) {
+    return filterMatchedToOwner(matched, slackUserToSlug.get(restrictToSlackUserId));
   }
   return matched;
 }
