@@ -5,6 +5,7 @@ import type { SlackMentionEvent } from '@rego/runtime-sdk';
 import { env } from './env.js';
 import { createLogger } from './logger.js';
 import { extractMentionedUserIds } from './helpers/slack-events.js';
+import { resolveUserName } from './helpers/slack-meta-cache.js';
 import { listConnectedUsers, getValidAccessToken } from './slack-tokens.js';
 import { ingestSlackMention } from './slack-ingest.js';
 
@@ -96,12 +97,15 @@ async function pollUser(token: string, slackUserId: string): Promise<number> {
       const fresh = filterNewSince(hist.messages ?? [], cursor!); // 커서 경계 메시지 제외(재처리 방지)
       const hits = selectMentioning(fresh, slackUserId);
       for (const m of hits) {
+        // 발신자 이름은 유저 토큰(users:read)으로 조회(캐시). 채널 이름은 users.conversations에서.
+        const senderName = m.user ? await resolveUserName(slack, m.user) : undefined;
         const event: SlackMentionEvent = {
           type: 'slack.mention',
           text: m.text!,
           channel: ch.id,
           channelName: ch.name,
           user: m.user ?? '',
+          userName: senderName,
           ts: m.ts,
           raw: { ...m, _source: 'poll' },
         };

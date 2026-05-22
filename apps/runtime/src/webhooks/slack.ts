@@ -69,9 +69,22 @@ export function createSlackRouter() {
       return c.json({ ok: true });
     }
 
-    // 4) Slack은 3초 내 응답을 요구 → 즉시 200, 처리는 비동기
+    // 4) Slack은 3초 내 응답을 요구 → 즉시 200, 처리는 비동기.
+    //    Tier1 포워딩(second-brain) 시 이름을 헤더로 실어주면 사용 (봇토큰 없이도 이름 표시).
+    const decodeH = (h?: string): string | undefined => {
+      if (!h) return undefined;
+      try {
+        return decodeURIComponent(h);
+      } catch {
+        return h;
+      }
+    };
+    const forwarded = {
+      userName: decodeH(c.req.header('x-rego-from-name')),
+      channelName: decodeH(c.req.header('x-rego-channel-name')),
+    };
     queueMicrotask(() =>
-      handleSlackEvent(payload).catch((err) => log.error('handler failed', err)),
+      handleSlackEvent(payload, forwarded).catch((err) => log.error('handler failed', err)),
     );
     return c.json({ ok: true });
   });
@@ -79,7 +92,10 @@ export function createSlackRouter() {
   return router;
 }
 
-async function handleSlackEvent(payload: SlackEventPayload) {
+async function handleSlackEvent(
+  payload: SlackEventPayload,
+  forwarded: { userName?: string; channelName?: string } = {},
+) {
   const event = payload.event!;
   const cfg = env();
 
@@ -91,17 +107,15 @@ async function handleSlackEvent(payload: SlackEventPayload) {
   }
   log.info(`event ${event.type}: ${decision.reason}`);
 
-  // 메타데이터 enrich (user/channel 이름은 캐시, permalink만 매번)
-  let userName: string | undefined;
-  let channelName: string | undefined;
+  // 메타데이터: 포워딩 시 second-brain이 실어준 이름을 우선 사용, 없으면 봇토큰으로 enrich.
+  let userName: string | undefined = forwarded.userName;
+  let channelName: string | undefined = forwarded.channelName;
   let permalink: string | undefined;
 
-  if (cfg.SLACK_BOT_TOKEN) {
+  if ((!userName || !channelName || !permalink) && cfg.SLACK_BOT_TOKEN) {
     const slack = new SlackClient(cfg.SLACK_BOT_TOKEN);
-    [userName, channelName] = await Promise.all([
-      resolveUserName(slack, event.user!),
-      resolveChannelName(slack, event.channel!),
-    ]);
+    if (!userName) userName = await resolveUserName(slack, event.user!);
+    if (!channelName) channelName = await resolveChannelName(slack, event.channel!);
     try {
       const pl = await slack.getPermalink({ channel: event.channel!, message_ts: event.ts! });
       permalink = pl.permalink;
