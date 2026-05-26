@@ -19,6 +19,7 @@ import { createLogger } from './logger.js';
 import { loadAllAgents, listAgents } from './agent-registry.js';
 import { refreshSlackUserMap } from './agent-runner.js';
 import { bindAllCronTriggers } from './agent-cron-bind.js';
+import { ensureGitWorkdir } from './git-sync.js';
 import { syncManifestToolsForAgent, ensureAgentRow } from './manifest-sync.js';
 import { analyzeAllStale } from './analyzer.js';
 import { startSlackPoller } from './slack-poller.js';
@@ -109,6 +110,9 @@ async function main() {
 
   // T4: 에이전트의 cron 트리거를 in-app 스케줄러에 등록
   bindAllCronTriggers(listAgents());
+
+  // T5: hot reload용 git workdir 부트스트랩 (Railpack 이미지에 .git 없을 때 init)
+  await ensureGitWorkdir();
 
   // Tier2 폴러 (옵트인 유저의 비공개 채널 멘션 폴링) — env로 게이트
   if (process.env.SLACK_POLL_ENABLED === '1') {

@@ -7,6 +7,55 @@ import { createLogger } from './logger.js';
 const exec = promisify(execFile);
 const log = createLogger('git-sync');
 
+const DEFAULT_REPO_URL = 'https://github.com/bearjun05/rego-agent.git';
+
+/**
+ * 서버 시작 시 git 작업 디렉터리 부트스트랩 (T5).
+ *
+ * Railpack 등 빌더로 만든 이미지는 .git이 없을 수 있다.
+ * 그 경우 git init + origin 추가로 fetch가 가능하게 만든다.
+ *
+ * 이미 .git 있으면 no-op. 실패해도 throw 안 함 (서버 부트 막지 않기).
+ */
+export async function ensureGitWorkdir(opts: { workdir?: string; repoUrl?: string } = {}): Promise<{ initialized: boolean; reason?: string }> {
+  const workdir = opts.workdir ?? process.cwd();
+  const repoUrl = opts.repoUrl ?? process.env.GIT_REPO_URL ?? DEFAULT_REPO_URL;
+
+  // git CLI 존재 확인
+  try {
+    await exec('git', ['--version'], { cwd: workdir });
+  } catch (err) {
+    log.warn('git CLI not available — hot reload will fail', err);
+    return { initialized: false, reason: 'git-not-installed' };
+  }
+
+  // .git 이미 있나
+  if (existsSync(path.join(workdir, '.git'))) {
+    // origin 있는지 확인 + 없으면 추가
+    try {
+      await exec('git', ['remote', 'get-url', 'origin'], { cwd: workdir });
+      log.info('git workdir already initialized');
+      return { initialized: false, reason: 'already-initialized' };
+    } catch {
+      await exec('git', ['remote', 'add', 'origin', repoUrl], { cwd: workdir });
+      log.info(`added origin → ${repoUrl}`);
+      return { initialized: true, reason: 'remote-added' };
+    }
+  }
+
+  // .git 없으면 init + remote
+  try {
+    await exec('git', ['init', '-b', 'main'], { cwd: workdir });
+    await exec('git', ['remote', 'add', 'origin', repoUrl], { cwd: workdir });
+    // 학습자 폴더만 checkout 할 거라 main 자체는 추적 안 해도 됨
+    log.info(`git workdir initialized at ${workdir} (origin=${repoUrl})`);
+    return { initialized: true, reason: 'init' };
+  } catch (err) {
+    log.warn('git init failed — hot reload unavailable', err);
+    return { initialized: false, reason: 'init-failed' };
+  }
+}
+
 /**
  * agent 폴더 이름 안전성 검사 — path injection / 명령 주입 방어 (순수).
  *
