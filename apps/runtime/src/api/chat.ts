@@ -17,6 +17,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { env } from '../env.js';
 import { createLogger } from '../logger.js';
+import { CELL_DEFS, CELL_IDS, type CellId } from '../bingo-rules.js';
+import { checkAllCells } from '../bingo-checks.js';
 
 const log = createLogger('chat');
 
@@ -86,6 +88,30 @@ export function createChatApi() {
     const callName = userName ?? displayName ?? null;
     const isFirstTurn = history.filter((h) => h.role === 'assistant').length === 0;
 
+    // 빙고 진행 상태 (agentName 있을 때만) — 시스템 프롬프트에 주입해 인솔이가 인지
+    let bingoSummary = '';
+    if (agentName) {
+      try {
+        const cells = await checkAllCells(agentName);
+        const lines = CELL_IDS.map((id) => {
+          const def = CELL_DEFS[id];
+          const mark = cells[id] === 'done' ? '✅' : '○';
+          return `${mark} ${id}. ${def.title}`;
+        });
+        const doneCount = Object.values(cells).filter((s) => s === 'done').length;
+        bingoSummary =
+          `[학습자 빙고 진행: ${doneCount}/9]\n` +
+          lines.join('\n') +
+          '\n\n각 셀 안내:\n' +
+          CELL_IDS.map((id) => {
+            const def = CELL_DEFS[id];
+            return `  ${id}. ${def.title} — ${def.description}\n     힌트: ${def.hint}`;
+          }).join('\n');
+      } catch (err) {
+        log.warn('bingo status load failed', err);
+      }
+    }
+
     const system = [
       '너는 "인솔이"라는 이름의 rego-agent 스터디 1주차 온보딩 코치야 (친근한 고양이 캐릭터 🐱).',
       '친근하고 간결한 한국어 존댓말을 쓰고, 이름을 물으면 "인솔이"라고 답해.',
@@ -117,6 +143,13 @@ export function createChatApi() {
         ? '- 이번이 첫 응답이야: "안녕하세요 OO님!"으로 맞이하고 → "에이전트는 레고다" 8주 컨셉을 한두 문장으로 가볍게 소개 → 오늘(1주차) 뭘 만들지(슬랙 멘션→텔레그램) 한 줄 → "무슨 컴퓨터 쓰세요?"로 0단계 시작. 짧은 메시지로 끊어서.'
         : '- 사용자의 현재 단계에 맞춰 가이드대로 다음 한 걸음을 안내해.',
       '- 모르면 모른다고 하고, 막연한 칭찬/사족은 빼.',
+      '',
+      '[빙고판 — 학습자가 푸는 9칸 미션]',
+      '대시보드 채팅에 빙고판이 자동 표시돼요. 학습자가 셀을 클릭하면 미션 카드가 뜹니다.',
+      '학습자가 "빙고 어떻게 해?", "○번 어떻게 풀어?" 같은 질문을 하면 아래 진행 상태/안내를 참고해서 한 셀씩 짧게 답해줘.',
+      '셀 3·4·5는 본인 폴더(agents/' + (agentName ?? '<slug>') + '/handler.ts) 코드를 수정해야 풀려요. 코드 수정 후 [내 코드 적용하기] 버튼을 누르라고 안내.',
+      '셀 6·7·9는 채팅창에 답을 적으면 자동 저장돼요. 셀 8은 cron 트리거(`trigger.cron("0 9 * * *")`) 등록 + 한 번 발화하면 클리어.',
+      bingoSummary || '(아직 학습자 미확인 — 빙고 상태 없음)',
       '',
       '[온보딩 가이드]',
       getOnboardingGuide(),
