@@ -43,9 +43,38 @@ async onSlackMention(event, ctx) {
 - `trigger.cron('0 9 * * *')` — 매일 정해진 시간
 
 ## 사용 가능한 도구 (ctx.tools)
-- `slack.reply` / `slack.post_message` / `slack.add_reaction` / `slack.search` / `slack.get_thread`
-- `telegram.send` / `telegram.send_with_button`
-- `llm.generate` / `llm.classify`  (또는 `ctx.llm.generate`, `ctx.llm.classify`, `ctx.llm.generateJson`)
+
+**Slack (학습자 본인 OAuth 토큰으로 자동 동작)**:
+- `slack.users_info({ user })` — 사용자 ID → 이름·프로필 (빙고 5)
+- `slack.conversations_info({ channel })` — 채널 ID → 이름 (빙고 5)
+- `slack.reactions_add({ channel, ts, name })` — 이모지 반응 (빙고 3)
+- `slack.reactions_list({ count })` — 본인 이모지 활동 (빙고 6 분석용)
+- `slack.search_messages({ query, count })` — 메시지 검색 (빙고 7/8 분석용)
+- `slack.conversations_history({ channel, limit })` — 채널 최근 메시지
+- `slack.reply` / `slack.post_message` / `slack.add_reaction` / `slack.search` / `slack.get_thread` (옛 호환)
+
+**Telegram**:
+- `telegram.send({ text, parseMode?, replyMarkup? })` — 본인 채팅으로 알림 (replyMarkup으로 버튼 가능)
+- `telegram.answer_callback({ callbackQueryId, text? })` — 버튼 클릭 ack (빙고 4)
+- `telegram.edit_message({ chatId, messageId, text })` — 보낸 메시지 수정 (빙고 4)
+- `telegram.send_with_button` (옛 호환)
+
+**LLM**: `ctx.llm.generate` / `ctx.llm.classify` / `ctx.llm.generateJson`
+
+## 핸들러 종류 (이벤트 → 함수)
+- `onSlackMention(event, ctx)` — 본인 멘션
+- `onSlackMessage(event, ctx)` — 채널 메시지
+- `onSlackReaction(event, ctx)` — 이모지 반응
+- `onCron(event, ctx)` — cron 스케줄 (빙고 8)
+- `onTelegramCallback(event, ctx)` — 텔레그램 버튼 클릭 (빙고 4)
+- `onManual(event, ctx)` — 대시보드에서 수동 실행
+
+## 빙고 풀이 흐름 (1주차)
+1. **대시보드 채팅(인솔이)에서 셀 클릭** → 미션 안내 카드 뜸
+2. **본인 폴더 코드 수정** (`handler.ts` / `agent.config.ts` / `prompts/`) → push
+3. **대시보드의 [내 코드 적용하기] 버튼 클릭** → 5초 안에 서버 반영
+4. **슬랙에서 본인 멘션** 보내 결과 확인 → 텔레그램 알림 도착
+5. 셀 자동 검증 통과 → 다음 셀
 
 ## 새 도구 만들기 (`tools/my-tool.ts` → 자동 등록)
 ```typescript

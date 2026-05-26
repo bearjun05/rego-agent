@@ -262,7 +262,19 @@ async function doHotReload(name: string): Promise<
     branch = r.branch;
   } catch (err) {
     reloadLog.error(`fetch failed for ${name}`, err);
-    return { ok: false, error: (err as Error).message, stage: 'fetch' };
+    const msg = (err as Error).message;
+    // 친절한 안내 — "브랜치 없음"이 가장 흔한 케이스
+    if (/couldn't find remote ref|not.+repository|unknown remote/i.test(msg)) {
+      return {
+        ok: false,
+        stage: 'fetch',
+        error:
+          `learner/${name} 브랜치를 못 찾았어요. 본인 컴퓨터에서 한 번만 실행해주세요:\n` +
+          `  git checkout -b learner/${name}\n` +
+          `  git push -u origin learner/${name}`,
+      };
+    }
+    return { ok: false, error: msg, stage: 'fetch' };
   }
 
   if (!agentFolderExists(name)) {
