@@ -5,9 +5,10 @@ import { OAuthCard } from './OAuthCard';
 import { ReloadButton } from './ReloadButton';
 import { MonitorCard } from './MonitorCard';
 import { RevealModal } from './RevealModal';
-import { ThemePicker, detectThemeIntent } from './ThemePicker';
+import { ThemePicker, detectThemeIntent, themeCategoryToIds, themeCategoryReason } from './ThemePicker';
 import { weekLabel, weekLabelEn } from '@/lib/week';
 import { Markdown } from './Markdown';
+import { ChatCard, parseSegments } from './ChatCards';
 
 type CardData =
   | { type: 'oauth'; agentSlug: string; done?: boolean }
@@ -421,7 +422,7 @@ export function HomeChat() {
     }
   };
 
-  // 실제 LLM 코치 호출 — 사용자(agentName=slug) 로그로 저장 + 호칭(userName) 전달
+  // 실제 LLM 코치 호출 — actions[]도 받아서 카드 렌더 (tool calling 결과)
   const askCoach = async (message: string, sid: string, s: string | null, g: string | null) => {
     setBusy(true);
     try {
@@ -435,12 +436,52 @@ export function HomeChat() {
           ...(g ? { userName: g } : {}),
         }),
       });
-      const data = (await res.json()) as { answer?: string; error?: string };
-      await typeOut(splitChunks(data.answer ?? `⚠ ${data.error ?? '응답이 없어요'}`));
+      const data = (await res.json()) as {
+        answer?: string;
+        actions?: Array<{ type: string; category?: string; agentSlug?: string }>;
+        error?: string;
+      };
+      if (data.answer) {
+        await typeOut(splitChunks(data.answer));
+      } else if (data.error) {
+        await typeOut([`⚠ ${data.error}`]);
+      }
+      // LLM이 결정한 액션 → 카드 렌더
+      for (const a of data.actions ?? []) {
+        const card = actionToCard(a, s);
+        if (card) {
+          setMessages((m) => [...m, { role: 'assistant', content: '', card }]);
+        }
+      }
     } catch (err) {
       await typeOut([`⚠ ${err instanceof Error ? err.message : String(err)}`]);
     } finally {
       setBusy(false);
+    }
+  };
+
+  // 서버에서 받은 action → 클라이언트 카드 데이터로 매핑
+  const actionToCard = (
+    a: { type: string; category?: string; agentSlug?: string },
+    fallbackSlug: string | null,
+  ): CardData | null => {
+    const slug = a.agentSlug ?? fallbackSlug;
+    switch (a.type) {
+      case 'monitor':
+        return { type: 'monitor' };
+      case 'theme-picker': {
+        // 서버에서 category만 받으므로 클라이언트의 사전 매핑 사용
+        const ids = themeCategoryToIds(a.category ?? 'general');
+        return { type: 'theme-picker', themeIds: ids, reason: themeCategoryReason(a.category ?? 'general') };
+      }
+      case 'oauth':
+        return slug ? { type: 'oauth', agentSlug: slug } : null;
+      case 'reload':
+        return slug ? { type: 'reload', agentSlug: slug } : null;
+      case 'bingo':
+        return slug ? { type: 'bingo', agentSlug: slug } : null;
+      default:
+        return null;
     }
   };
 
@@ -534,28 +575,8 @@ export function HomeChat() {
       return;
     }
 
-    // 2) 자유 대화 — 키워드 감지 → 카드 자동 첨부
+    // 2) 자유 대화 — 카드 결정은 서버 LLM tool calling이 함
     setMessages((m) => [...m, { role: 'user', content }]);
-
-    // monitor 카드
-    const wantsMonitor = /다른\s*사람|전체|모두|monitor|모니터|진행률|누가\s*뭐/.test(content);
-    if (wantsMonitor) {
-      setMessages((m) => [...m, { role: 'assistant', content: '', card: { type: 'monitor' } }]);
-    }
-
-    // 테마 추천 카드
-    const themeIntent = detectThemeIntent(content);
-    if (themeIntent) {
-      setMessages((m) => [
-        ...m,
-        {
-          role: 'assistant',
-          content: '',
-          card: { type: 'theme-picker', themeIds: themeIntent.ids, reason: themeIntent.reason },
-        },
-      ]);
-    }
-
     await askCoach(content, sessionRef.current, slug, given);
   };
 
@@ -605,29 +626,19 @@ export function HomeChat() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((m, i) => (
           <div key={i} className="space-y-2 msg-in">
-            {m.content && (
-              <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}>
-                {m.role === 'assistant' && (
-                  <span
-                    aria-hidden
-                    className="text-lg leading-none shrink-0 select-none"
-                    style={{ marginBottom: 4 }}
+            {m.content &&
+              (m.role === 'user' ? (
+                <div className="flex justify-end items-end gap-2">
+                  <div
+                    className="max-w-[80%] px-4 py-3 text-sm leading-relaxed space-y-2 bg-ink text-paper whitespace-pre-wrap"
+                    style={{ borderRadius: 'var(--th-card-radius, 0)' }}
                   >
-                    🐱
-                  </span>
-                )}
-                <div
-                  className={`max-w-[80%] px-4 py-3 text-sm leading-relaxed space-y-2 ${
-                    m.role === 'user'
-                      ? 'bg-ink text-paper whitespace-pre-wrap'
-                      : 'bg-sand border-2 border-line'
-                  }`}
-                  style={{ borderRadius: 'var(--th-card-radius, 0)' }}
-                >
-                  {m.role === 'assistant' ? <Markdown text={m.content} /> : m.content}
+                    {m.content}
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <AssistantMessage content={m.content} />
+              ))}
             {m.card && (
               <div className="max-w-[92%]">
                 {m.card.type === 'oauth' && (
@@ -735,5 +746,43 @@ export function HomeChat() {
       </form>
     </div>
     </>
+  );
+}
+
+/**
+ * 인솔이 메시지 렌더러 — [[card:type {json}]] 토큰을 파싱해서
+ * 텍스트는 버블, 카드는 별도 컴포넌트로 분리 렌더.
+ */
+function AssistantMessage({ content }: { content: string }) {
+  const segments = parseSegments(content);
+  return (
+    <div className="space-y-2">
+      {segments.map((seg, i) => {
+        if (seg.kind === 'text') {
+          return (
+            <div key={i} className="flex justify-start items-end gap-2">
+              <span
+                aria-hidden
+                className="text-lg leading-none shrink-0 select-none"
+                style={{ marginBottom: 4 }}
+              >
+                🐱
+              </span>
+              <div
+                className="max-w-[80%] px-4 py-3 text-sm leading-relaxed space-y-2 bg-sand border-2 border-line"
+                style={{ borderRadius: 'var(--th-card-radius, 0)' }}
+              >
+                <Markdown text={seg.text} />
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div key={i} className="pl-8 max-w-[92%]">
+            <ChatCard type={seg.type} data={seg.data} />
+          </div>
+        );
+      })}
+    </div>
   );
 }

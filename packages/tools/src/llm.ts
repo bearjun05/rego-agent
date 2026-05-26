@@ -33,6 +33,29 @@ export function extractJson<T = unknown>(text: string): T {
  * 가벼운 OpenRouter REST 클라이언트.
  * 응답에서 토큰 사용량 + cost를 추출.
  */
+/** OpenAI-호환 tool 정의 (DeepSeek/Claude 등 다수 모델 지원) */
+export interface ToolDef {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: Record<string, unknown>;
+      required?: string[];
+    };
+  };
+}
+
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string; // JSON string
+  };
+}
+
 export interface OpenRouterCallParams {
   apiKey: string;
   model: string;
@@ -42,13 +65,16 @@ export interface OpenRouterCallParams {
   maxTokens?: number;
   responseFormat?: 'text' | 'json';
   baseUrl?: string;
+  /** 도구 정의 — 모델이 자연어 의도 파악 후 호출 */
+  tools?: ToolDef[];
+  toolChoice?: 'auto' | 'none' | { type: 'function'; function: { name: string } };
 }
 
 export interface OpenRouterResponse {
   id: string;
   model: string;
   choices: Array<{
-    message: { content: string };
+    message: { content: string | null; tool_calls?: ToolCall[] };
     finish_reason: string;
   }>;
   usage?: {
@@ -74,6 +100,10 @@ export async function callOpenRouter(
   if (params.temperature !== undefined) body.temperature = params.temperature;
   if (params.maxTokens !== undefined) body.max_tokens = params.maxTokens;
   if (params.responseFormat === 'json') body.response_format = { type: 'json_object' };
+  if (params.tools && params.tools.length > 0) {
+    body.tools = params.tools;
+    body.tool_choice = params.toolChoice ?? 'auto';
+  }
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',

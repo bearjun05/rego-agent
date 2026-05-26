@@ -72,7 +72,48 @@ export function ThemePicker({
 }
 
 /**
+ * 카테고리 → 추천 테마 ID 4개.
+ * 서버 LLM이 카테고리만 반환하면 클라이언트가 이걸로 매핑.
+ */
+export function themeCategoryToIds(category: string): string[] {
+  switch (category) {
+    case 'dark':
+      return ['lego-noir', 'lego-cyber', 'lego-studio', 'lego-glass'];
+    case 'pastel':
+      return ['lego-pastel', 'lego-friends', 'lego-paper', 'lego-sunrise'];
+    case 'simple':
+      return ['lego-minimal', 'lego-classic', 'lego-mono', 'brutalist'];
+    case 'vintage':
+      return ['lego-vintage', 'lego-paper', 'lego-sunrise', 'lego-beach'];
+    case 'lego-bright':
+      return ['lego-classic', 'lego-plate', 'lego-friends', 'lego-construction'];
+    case 'general':
+    default:
+      return ['lego-classic', 'lego-noir', 'lego-pastel', 'lego-glass'];
+  }
+}
+
+export function themeCategoryReason(category: string): string {
+  switch (category) {
+    case 'dark':
+      return '어두운 분위기 위주. 사이버는 좀 자극, 스튜디오는 차분.';
+    case 'pastel':
+      return '부드러운 톤. 프렌즈는 살짝 회전까지 들어가요.';
+    case 'simple':
+      return '심플한 톤. 모노는 진짜 순흑백.';
+    case 'vintage':
+      return '따뜻하고 클래식한 톤. 페이퍼는 진짜 종이질감.';
+    case 'lego-bright':
+      return '정통 레고 컬러팔레트.';
+    case 'general':
+    default:
+      return '대표 4종. 우측 하단 버튼으로 20개 다 골라볼 수 있어요.';
+  }
+}
+
+/**
  * 사용자 메시지에서 키워드 감지 → 추천 테마 셋 반환.
+ * (Phase 2 이후 LLM tool calling 우선이지만, 클라이언트 즉시반응용 백업 — 비활성화됨)
  * null이면 추천 안 함.
  */
 export function detectThemeIntent(text: string): { ids: string[]; reason: string } | null {
