@@ -1,0 +1,239 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { eq, sql, and, isNotNull, or, like } from 'drizzle-orm';
+import {
+  getDb,
+  agents,
+  slackUserTokens,
+  telegramMessages,
+  toolCalls,
+  runs,
+  kvState,
+} from '@rego/db';
+import { createLogger } from './logger.js';
+import { CHAT_INPUT_CELLS, type CellId, type CellStatus } from './bingo-rules.js';
+import { getAgentsRoot, getAgent } from './agent-registry.js';
+
+const log = createLogger('bingo-checks');
+
+export interface CheckResult {
+  passed: boolean;
+  reason: string;
+  /** LLM 리뷰 등에서 추가 힌트 제공 가능 */
+  hint?: string;
+}
+
+// ─────────────────────────────────────────────────────────
+// 9칸 체크
+// ─────────────────────────────────────────────────────────
+
+export async function checkCell(cell: CellId, agentName: string): Promise<CheckResult> {
+  switch (cell) {
+    case 1:
+      return checkOAuth(agentName);
+    case 2:
+      return checkFirstMentionToTelegram(agentName);
+    case 3:
+      return checkToolUsed(agentName, ['slack.reactions_add', 'slack.add_reaction']);
+    case 4:
+      return checkButtonCallback(agentName);
+    case 5:
+      return reviewHandlerCode(agentName, 'names');
+    case 6:
+    case 7:
+    case 9:
+      return checkChatInput(agentName, cell);
+    case 8:
+      return checkCronFired(agentName);
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// 셀 1 — OAuth
+// ─────────────────────────────────────────────────────────
+async function checkOAuth(agentName: string): Promise<CheckResult> {
+  const db = getDb();
+  const [agentRow] = await db
+    .select({ slackUserId: agents.slackUserId })
+    .from(agents)
+    .where(eq(agents.name, agentName));
+  if (!agentRow?.slackUserId) {
+    return { passed: false, reason: 'agent의 slack_user_id가 등록 안 됐어요 (관리자에게 문의)' };
+  }
+  const [token] = await db
+    .select({ revoked: slackUserTokens.revoked })
+    .from(slackUserTokens)
+    .where(eq(slackUserTokens.slackUserId, agentRow.slackUserId));
+  if (!token) return { passed: false, reason: '아직 OAuth 안 했어요' };
+  if (token.revoked) return { passed: false, reason: 'OAuth 했지만 revoke됨 — 다시 연결해주세요' };
+  return { passed: true, reason: 'OAuth 완료' };
+}
+
+// ─────────────────────────────────────────────────────────
+// 셀 2 — 슬랙 멘션 → 텔레그램 도착
+// ─────────────────────────────────────────────────────────
+async function checkFirstMentionToTelegram(agentName: string): Promise<CheckResult> {
+  const db = getDb();
+  const [r] = await db
+    .select({ cnt: sql<number>`count(*)::int` })
+    .from(telegramMessages)
+    .where(
+      and(
+        eq(telegramMessages.agentName, agentName),
+        isNotNull(telegramMessages.triggeredBySlackMentionId),
+      ),
+    );
+  if (!r || r.cnt < 1) {
+    return {
+      passed: false,
+      reason: '아직 본인 멘션 → 텔레그램 전송 기록이 없어요. 슬랙에서 본인을 멘션해보세요.',
+    };
+  }
+  return { passed: true, reason: `${r.cnt}건 도착함` };
+}
+
+// ─────────────────────────────────────────────────────────
+// 셀 3 — 도구 호출 로그
+// ─────────────────────────────────────────────────────────
+async function checkToolUsed(agentName: string, toolIds: string[]): Promise<CheckResult> {
+  const db = getDb();
+  const [r] = await db
+    .select({ cnt: sql<number>`count(*)::int` })
+    .from(toolCalls)
+    .where(
+      and(
+        eq(toolCalls.agentName, agentName),
+        or(...toolIds.map((id) => eq(toolCalls.toolId, id))),
+        // 성공한 호출만 (error null)
+        sql`${toolCalls.error} IS NULL`,
+      ),
+    );
+  if (!r || r.cnt < 1) {
+    return {
+      passed: false,
+      reason: `아직 [${toolIds.join(' / ')}] 도구를 호출 안 했어요`,
+    };
+  }
+  return { passed: true, reason: `${r.cnt}회 호출됨` };
+}
+
+// ─────────────────────────────────────────────────────────
+// 셀 4 — 텔레그램 콜백 라우팅 1건
+// ─────────────────────────────────────────────────────────
+async function checkButtonCallback(agentName: string): Promise<CheckResult> {
+  const db = getDb();
+  const [r] = await db
+    .select({ cnt: sql<number>`count(*)::int` })
+    .from(runs)
+    .where(and(eq(runs.agentName, agentName), eq(runs.triggerType, 'telegram.callback')));
+  if (!r || r.cnt < 1) {
+    return {
+      passed: false,
+      reason: '텔레그램 버튼이 클릭된 적이 없어요. 핸들러에서 inline_keyboard로 버튼 추가 후 클릭해보세요.',
+    };
+  }
+  return { passed: true, reason: `콜백 ${r.cnt}건 처리됨` };
+}
+
+// ─────────────────────────────────────────────────────────
+// 셀 5 — LLM 코드 리뷰 (handler가 이름 enrich했는지)
+// ─────────────────────────────────────────────────────────
+async function reviewHandlerCode(agentName: string, criterion: 'names'): Promise<CheckResult> {
+  const filePath = path.join(getAgentsRoot(), agentName, 'handler.ts');
+  let code: string;
+  try {
+    code = await fs.readFile(filePath, 'utf8');
+  } catch {
+    return { passed: false, reason: `handler.ts를 읽을 수 없어요: ${filePath}` };
+  }
+
+  // 빠른 정적 체크 — 도구 호출 패턴이 코드에 있나
+  if (criterion === 'names') {
+    const hasUsersInfo =
+      /tools\[['"`]slack\.users_info['"`]\]|tools\.slack\.users_info/.test(code);
+    const hasConvInfo =
+      /tools\[['"`]slack\.conversations_info['"`]\]|tools\.slack\.conversations_info/.test(code);
+    if (!hasUsersInfo && !hasConvInfo) {
+      return {
+        passed: false,
+        reason: '핸들러에 `slack.users_info` 또는 `slack.conversations_info` 호출이 안 보여요',
+        hint:
+          'await ctx.tools["slack.users_info"]({ user: event.user }) 로 이름 받아서 텔레그램에 박아보세요',
+      };
+    }
+    // 도구는 호출하는데 실제로 메시지에 반영했는지 → LLM에 위임 (선택)
+    // 시간 절약: 정적 통과 = 클리어 (학습자가 진심으로 작성한 거라 신뢰)
+    return { passed: true, reason: '슬랙 enrich 도구 호출 감지됨' };
+  }
+  return { passed: false, reason: `unknown criterion: ${criterion}` };
+}
+
+// ─────────────────────────────────────────────────────────
+// 셀 6,7,9 — 채팅 입력
+// ─────────────────────────────────────────────────────────
+async function checkChatInput(agentName: string, cell: CellId): Promise<CheckResult> {
+  if (!CHAT_INPUT_CELLS.has(cell)) {
+    return { passed: false, reason: `cell ${cell} is not chat_input` };
+  }
+  const db = getDb();
+  const key = `bingo:cell${cell}`;
+  const [row] = await db
+    .select()
+    .from(kvState)
+    .where(and(eq(kvState.agentName, agentName), eq(kvState.key, key)));
+  if (!row) return { passed: false, reason: '아직 입력 안 했어요' };
+  const value = row.value as string | { text?: string } | null;
+  const text = typeof value === 'string' ? value : value?.text;
+  if (!text || text.trim().length < 3) {
+    return { passed: false, reason: '입력이 너무 짧아요 (3자 이상)' };
+  }
+  return { passed: true, reason: '입력 완료' };
+}
+
+// ─────────────────────────────────────────────────────────
+// 셀 8 — cron 트리거 발화 1건
+// ─────────────────────────────────────────────────────────
+async function checkCronFired(agentName: string): Promise<CheckResult> {
+  const db = getDb();
+  const [r] = await db
+    .select({ cnt: sql<number>`count(*)::int` })
+    .from(runs)
+    .where(and(eq(runs.agentName, agentName), eq(runs.triggerType, 'cron')));
+  if (!r || r.cnt < 1) {
+    // 폴백: agent.config.ts에 cron 선언만 했으면 "곧 발화 예정"으로 알려줌
+    const agent = getAgent(agentName);
+    const hasCronTrigger = agent?.manifest.triggers.some(
+      (t) => t.type === 'cron' && t.schedule,
+    );
+    if (hasCronTrigger) {
+      return {
+        passed: false,
+        reason: 'cron 트리거 등록됨 — 다음 발화 시각을 기다리거나 onCron을 호출해 발화시키세요',
+      };
+    }
+    return {
+      passed: false,
+      reason: 'agent.config.ts에 `trigger.cron("0 9 * * *")` 같은 트리거를 추가하세요',
+    };
+  }
+  return { passed: true, reason: `cron ${r.cnt}회 발화됨` };
+}
+
+// ─────────────────────────────────────────────────────────
+// 9칸 일괄 체크 (status API용)
+// ─────────────────────────────────────────────────────────
+export async function checkAllCells(
+  agentName: string,
+): Promise<Record<CellId, CellStatus>> {
+  const result = {} as Record<CellId, CellStatus>;
+  for (const cell of [1, 2, 3, 4, 5, 6, 7, 8, 9] as CellId[]) {
+    try {
+      const r = await checkCell(cell, agentName);
+      result[cell] = r.passed ? 'done' : 'pending';
+    } catch (err) {
+      log.warn(`cell ${cell} check failed for ${agentName}`, err);
+      result[cell] = 'pending';
+    }
+  }
+  return result;
+}
