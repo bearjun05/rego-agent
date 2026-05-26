@@ -81,11 +81,18 @@ body::before {
   position: absolute;
   inset: 0;
   background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  opacity: 0.6;
+  opacity: var(--th-noise-opacity, 0.6);
   pointer-events: none;
   z-index: 1;
 }
 .noise > * { position: relative; z-index: 2; }
+
+/* Hero wrapper — body overlay 가 비쳐들지 않게 solid bg */
+.hero-clean {
+  background: var(--th-bg);
+  position: relative;
+  z-index: 1;
+}
 
 .brut {
   border: var(--th-card-border-w) solid var(--th-border);
@@ -335,6 +342,48 @@ body::before {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--th-fg); border-radius: 0; }
 
+
+/* ═══════════════════════════════════════════════════════════
+ *  노이즈 / 텍스처 — 테마별 ON/OFF
+ * ═══════════════════════════════════════════════════════════ */
+
+/* 기본(브루털리스트): 노이즈 살짝 켬 */
+:root { --th-noise-opacity: 0.6; }
+
+/* 다크 테마 — 노이즈가 들떠 보임. OFF */
+[data-theme='lego-noir'],
+[data-theme='lego-cyber'],
+[data-theme='lego-studio'],
+[data-theme='lego-glass'] {
+  --th-noise-opacity: 0;
+}
+
+/* 강한 배경 텍스처를 이미 가진 테마 — 노이즈 OFF */
+[data-theme='lego-architectural'],
+[data-theme='lego-construction'],
+[data-theme='lego-brickwall'],
+[data-theme='lego-plate'],
+[data-theme='lego-beach'],
+[data-theme='lego-sunrise'] {
+  --th-noise-opacity: 0;
+}
+
+/* 종이/빈티지 — 노이즈를 좀 더 강조 */
+[data-theme='lego-paper'],
+[data-theme='lego-vintage'] {
+  --th-noise-opacity: 0.5;
+}
+
+/* 라운드 카드 테마 — 노이즈 약하게 */
+[data-theme='lego-classic'],
+[data-theme='lego-pastel'],
+[data-theme='lego-friends'],
+[data-theme='lego-minimal'],
+[data-theme='lego-forest'],
+[data-theme='lego-mono'],
+[data-theme='lego-studs-prominent'] {
+  --th-noise-opacity: 0.15;
+}
 
 /* ═══════════════════════════════════════════════════════════
  *  20 테마 — [data-theme='X'] 로 활성화

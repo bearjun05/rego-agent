@@ -64,18 +64,6 @@ export default function Week2Page() {
         >
           ← 인솔이 채팅
         </Link>
-        <Link
-          href="/week1"
-          className="brut px-4 py-2 font-mono text-xs hover:bg-sand transition-colors"
-        >
-          1주차 대시보드
-        </Link>
-        <Link
-          href="/admin"
-          className="brut px-4 py-2 font-mono text-xs hover:bg-sand transition-colors"
-        >
-          운영 관리
-        </Link>
       </section>
     </div>
   );

@@ -5,13 +5,16 @@ import { OAuthCard } from './OAuthCard';
 import { ReloadButton } from './ReloadButton';
 import { MonitorCard } from './MonitorCard';
 import { RevealModal } from './RevealModal';
+import { ThemePicker, detectThemeIntent } from './ThemePicker';
+import { weekLabel, weekLabelEn } from '@/lib/week';
 
 type CardData =
   | { type: 'oauth'; agentSlug: string; done?: boolean }
   | { type: 'bingo'; agentSlug: string }
   | { type: 'mission'; cell: CellDef }
   | { type: 'reload'; agentSlug: string }
-  | { type: 'monitor' };
+  | { type: 'monitor' }
+  | { type: 'theme-picker'; themeIds: string[]; reason: string };
 
 interface Message {
   role: 'user' | 'assistant';
@@ -500,12 +503,28 @@ export function HomeChat() {
       return;
     }
 
-    // 2) 자유 대화 — "다른 사람", "전체", "monitor" 등 키워드면 monitor 카드 자동 첨부
+    // 2) 자유 대화 — 키워드 감지 → 카드 자동 첨부
     setMessages((m) => [...m, { role: 'user', content }]);
+
+    // monitor 카드
     const wantsMonitor = /다른\s*사람|전체|모두|monitor|모니터|진행률|누가\s*뭐/.test(content);
     if (wantsMonitor) {
       setMessages((m) => [...m, { role: 'assistant', content: '', card: { type: 'monitor' } }]);
     }
+
+    // 테마 추천 카드
+    const themeIntent = detectThemeIntent(content);
+    if (themeIntent) {
+      setMessages((m) => [
+        ...m,
+        {
+          role: 'assistant',
+          content: '',
+          card: { type: 'theme-picker', themeIds: themeIntent.ids, reason: themeIntent.reason },
+        },
+      ]);
+    }
+
     await askCoach(content, sessionRef.current, slug, given);
   };
 
@@ -528,7 +547,7 @@ export function HomeChat() {
           <div>
             <div className="font-display font-bold text-lg leading-tight">인솔이</div>
             <div className="font-mono text-[10px] uppercase text-muted">
-              {given ? `${given}님과 함께 1주차` : '오늘 뭐 할지 알려줄게요'}
+              {given ? `${given}님과 함께 ${weekLabel()}` : '오늘 뭐 할지 알려줄게요'}
             </div>
           </div>
         </div>
@@ -548,7 +567,7 @@ export function HomeChat() {
           </div>
         )}
         <span className="font-mono text-[10px] uppercase text-muted hidden sm:block">
-          WEEK 1 · ONBOARDING
+          {weekLabelEn()} · ONBOARDING
         </span>
       </div>
 
@@ -624,6 +643,9 @@ export function HomeChat() {
                   />
                 )}
                 {m.card.type === 'monitor' && <MonitorCard compact />}
+                {m.card.type === 'theme-picker' && (
+                  <ThemePicker themeIds={m.card.themeIds} reason={m.card.reason} />
+                )}
               </div>
             )}
           </div>

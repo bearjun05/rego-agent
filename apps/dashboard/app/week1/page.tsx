@@ -3,6 +3,7 @@ import { StatsBar } from '@/components/StatsBar';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { AgentGrid } from '@/components/AgentGrid';
 import { MentionFlow } from '@/components/MentionFlow';
+import { WeekLabel } from '@/components/WeekLabel';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,7 @@ export default function Week1DashboardPage() {
               SPARTA · AGENT STUDY
             </div>
             <h1 className="font-display font-extrabold text-4xl lg:text-6xl leading-none tracking-tight">
-              1주차 <span className="text-rust">대시보드</span>
+              <WeekLabel /> <span className="text-rust">대시보드</span>
             </h1>
             <p className="mt-3 text-sm text-muted max-w-xl">
               슬랙 멘션 → 텔레그램 알림(분류). 누가 무엇을 깎고 있는지, 멘션이 어떻게 흐르는지
