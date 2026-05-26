@@ -356,6 +356,7 @@ function pickHandler(agent: LoadedAgent, event: AgentEvent) {
   if (event.type === 'slack.reaction_added' && h.onSlackReaction) return h.onSlackReaction;
   if (event.type === 'cron' && h.onCron) return h.onCron;
   if (event.type === 'manual' && h.onManual) return h.onManual;
+  if (event.type === 'telegram.callback' && h.onTelegramCallback) return h.onTelegramCallback;
   return h.default;
 }
 

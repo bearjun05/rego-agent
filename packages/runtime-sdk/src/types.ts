@@ -232,12 +232,27 @@ export interface ManualEvent {
   payload: unknown;
 }
 
+export interface TelegramCallbackEvent {
+  type: 'telegram.callback';
+  callbackQueryId: string;
+  /** 버튼에 박은 callback_data (최대 64바이트). 예: "approve:123" */
+  data: string;
+  chatId: string;
+  messageId: number;
+  /** 콜백을 누른 텔레그램 사용자 ID */
+  userId: string;
+  userName?: string;
+  /** 원본 메시지 텍스트 (수정 도구 사용 시 참고) */
+  messageText?: string;
+}
+
 export type AgentEvent =
   | SlackMentionEvent
   | SlackMessageEvent
   | SlackReactionEvent
   | CronEvent
-  | ManualEvent;
+  | ManualEvent
+  | TelegramCallbackEvent;
 
 // ─────────────────────────────────────────────────────────
 // Handler
@@ -254,6 +269,8 @@ export interface AgentHandlerExports {
   onSlackReaction?: HandlerFunction<SlackReactionEvent>;
   onCron?: HandlerFunction<CronEvent>;
   onManual?: HandlerFunction<ManualEvent>;
+  /** 텔레그램 버튼 클릭 콜백 (manifest 트리거 아님 — chat_id 매핑으로 라우팅) */
+  onTelegramCallback?: HandlerFunction<TelegramCallbackEvent>;
   /** Generic catch-all */
   default?: HandlerFunction<AgentEvent>;
 }

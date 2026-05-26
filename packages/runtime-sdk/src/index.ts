@@ -28,6 +28,7 @@ export type {
   SlackReactionEvent,
   CronEvent,
   ManualEvent,
+  TelegramCallbackEvent,
   HandlerFunction,
   AgentHandlerExports,
   RunRecord,
