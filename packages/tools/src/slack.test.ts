@@ -63,6 +63,39 @@ describe('slack 도구 메타데이터', () => {
   });
 });
 
+describe('Phase 2: 새 슬랙 도구 6종 등록', () => {
+  it('Phase 2 도구 6개가 allSlackTools에 포함', () => {
+    const ids = allSlackTools.map((t) => t.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'slack.users_info',
+        'slack.conversations_info',
+        'slack.reactions_add',
+        'slack.reactions_list',
+        'slack.search_messages',
+        'slack.conversations_history',
+      ]),
+    );
+  });
+
+  it('Phase 2 도구는 secrets 미선언 (학습자 OAuth 토큰만 필요)', () => {
+    const phase2Ids = new Set([
+      'slack.users_info',
+      'slack.conversations_info',
+      'slack.reactions_add',
+      'slack.reactions_list',
+      'slack.search_messages',
+      'slack.conversations_history',
+    ]);
+    for (const t of allSlackTools) {
+      if (phase2Ids.has(t.id)) {
+        // secrets 비어있거나 미선언이어야 함
+        expect(t.secrets ?? []).toEqual([]);
+      }
+    }
+  });
+});
+
 describe('pickSlackToken (Phase 1: 토큰 선택)', () => {
   it('agent 토큰 있으면 그것 우선 사용', () => {
     expect(pickSlackToken('xoxp-agent', 'xoxb-global')).toBe('xoxp-agent');

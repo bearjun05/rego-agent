@@ -151,6 +151,21 @@ export class SlackClient {
       { query: opts.query, count: opts.count ?? 20 },
     );
   }
+
+  /** Phase 2: reactions.list — 본인이 단/받은 이모지 반응 목록 (user_token 권장) */
+  reactionsList(opts: { count?: number; page?: number; full?: boolean }) {
+    return this.call<{
+      items: Array<{
+        type: string;
+        channel?: string;
+        message?: { ts: string; text?: string; reactions?: Array<{ name: string; count: number }> };
+      }>;
+    }>('reactions.list', {
+      count: opts.count ?? 100,
+      page: opts.page ?? 1,
+      full: opts.full ?? true,
+    });
+  }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -270,10 +285,178 @@ export const slackGetThread = defineTool({
   },
 });
 
+// ─────────────────────────────────────────────────────────
+// Phase 2 — 슬랙 API 명명 규칙 도구 6종 (학습자가 Slack 문서 보고 바로 쓰게)
+// ─────────────────────────────────────────────────────────
+
+export const slackUsersInfo = defineTool({
+  id: 'slack.users_info',
+  name: '슬랙 사용자 정보',
+  description: '슬랙 user_id로 사용자 이름·프로필 조회',
+  category: 'knowledge',
+  icon: '👤',
+  color: '#4A154B',
+  inputs: z.object({ user: z.string() }),
+  outputs: z.object({
+    id: z.string(),
+    name: z.string().optional(),
+    real_name: z.string().optional(),
+    display_name: z.string().optional(),
+    profile: z.unknown().optional(),
+  }),
+  costTier: 'free',
+  latencyTier: 'fast',
+  async run({ user }, ctx) {
+    const slack = new SlackClient(tokenFromCtx(ctx));
+    const r = await slack.usersInfo({ user });
+    return {
+      id: r.user.id,
+      name: r.user.name,
+      real_name: r.user.real_name,
+      display_name: r.user.profile?.display_name,
+      profile: r.user.profile,
+    };
+  },
+});
+
+export const slackConversationsInfo = defineTool({
+  id: 'slack.conversations_info',
+  name: '슬랙 채널 정보',
+  description: '슬랙 channel_id로 채널 이름 등 메타 조회',
+  category: 'knowledge',
+  icon: '#️⃣',
+  color: '#4A154B',
+  inputs: z.object({ channel: z.string() }),
+  outputs: z.object({
+    id: z.string(),
+    name: z.string().optional(),
+  }),
+  costTier: 'free',
+  latencyTier: 'fast',
+  async run({ channel }, ctx) {
+    const slack = new SlackClient(tokenFromCtx(ctx));
+    const r = await slack.conversationsInfo({ channel });
+    return { id: r.channel.id, name: r.channel.name };
+  },
+});
+
+export const slackReactionsAdd = defineTool({
+  id: 'slack.reactions_add',
+  name: '슬랙 이모지 반응 추가',
+  description: '슬랙 메시지에 이모지 반응(:eyes:, :white_check_mark: 등)을 답니다',
+  category: 'messaging',
+  icon: '👀',
+  color: '#4A154B',
+  inputs: z.object({
+    channel: z.string(),
+    ts: z.string(),
+    name: z.string().describe('이모지 이름, 콜론 없이 (예: eyes, white_check_mark)'),
+  }),
+  outputs: z.object({ ok: z.boolean() }),
+  costTier: 'free',
+  latencyTier: 'fast',
+  sideEffects: { reads: [], writes: ['slack'] },
+  async run({ channel, ts, name }, ctx) {
+    const slack = new SlackClient(tokenFromCtx(ctx));
+    // Slack API는 timestamp 필드 사용
+    await slack.addReaction({ channel, timestamp: ts, name: name.replace(/:/g, '') });
+    return { ok: true };
+  },
+});
+
+export const slackReactionsList = defineTool({
+  id: 'slack.reactions_list',
+  name: '내 이모지 활동',
+  description: '본인이 단/받은 이모지 반응 목록 (이모지 분석용)',
+  category: 'knowledge',
+  icon: '🎨',
+  color: '#4A154B',
+  inputs: z.object({
+    count: z.number().int().positive().max(200).default(100),
+    page: z.number().int().positive().default(1),
+  }),
+  outputs: z.object({
+    items: z.array(z.unknown()),
+  }),
+  costTier: 'low',
+  async run({ count, page }, ctx) {
+    const slack = new SlackClient(tokenFromCtx(ctx));
+    const r = await slack.reactionsList({ count, page, full: true });
+    return { items: r.items ?? [] };
+  },
+});
+
+export const slackSearchMessages = defineTool({
+  id: 'slack.search_messages',
+  name: '슬랙 메시지 검색',
+  description: '본인 시야로 슬랙 메시지 검색 (분석·통계용). 인덱싱 ~30s 지연 있음',
+  category: 'knowledge',
+  icon: '🔍',
+  color: '#4A154B',
+  inputs: z.object({
+    query: z.string(),
+    count: z.number().int().positive().max(100).default(20),
+    page: z.number().int().positive().default(1),
+    sort: z.enum(['score', 'timestamp']).default('timestamp'),
+  }),
+  outputs: z.object({
+    matches: z.array(z.unknown()),
+  }),
+  costTier: 'low',
+  async run({ query, count, page, sort }, ctx) {
+    const slack = new SlackClient(tokenFromCtx(ctx));
+    // SlackClient.search는 기본 인터페이스만 — 직접 호출
+    const r = await slack.call<{ messages: { matches: unknown[] } }>('search.messages', {
+      query,
+      count,
+      page,
+      sort,
+    });
+    return { matches: r.messages?.matches ?? [] };
+  },
+});
+
+export const slackConversationsHistory = defineTool({
+  id: 'slack.conversations_history',
+  name: '채널 히스토리',
+  description: '채널의 최근 메시지를 가져옵니다',
+  category: 'knowledge',
+  icon: '📜',
+  color: '#4A154B',
+  inputs: z.object({
+    channel: z.string(),
+    limit: z.number().int().positive().max(100).default(20),
+    oldest: z.string().optional().describe('가장 오래된 ts (포함)'),
+    latest: z.string().optional().describe('가장 최근 ts (포함)'),
+  }),
+  outputs: z.object({
+    messages: z.array(z.unknown()),
+  }),
+  costTier: 'low',
+  async run({ channel, limit, oldest, latest }, ctx) {
+    const slack = new SlackClient(tokenFromCtx(ctx));
+    const r = await slack.call<{ messages: unknown[] }>('conversations.history', {
+      channel,
+      limit,
+      ...(oldest ? { oldest } : {}),
+      ...(latest ? { latest } : {}),
+    });
+    return { messages: r.messages ?? [] };
+  },
+});
+
 export const allSlackTools = [
+  // 기존 (옛 호환)
   slackReply,
   slackPostMessage,
   slackAddReaction,
   slackSearch,
   slackGetThread,
+  // Phase 2 (슬랙 API 명명 규칙)
+  slackUsersInfo,
+  slackConversationsInfo,
+  slackReactionsAdd,
+  slackReactionsList,
+  slackSearchMessages,
+  slackConversationsHistory,
 ];
