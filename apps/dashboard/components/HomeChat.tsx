@@ -1,9 +1,19 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { BingoBoard, type CellDef, type CellStatus } from './BingoBoard';
+import { OAuthCard } from './OAuthCard';
+import { ReloadButton } from './ReloadButton';
+
+type CardData =
+  | { type: 'oauth'; agentSlug: string; done?: boolean }
+  | { type: 'bingo'; agentSlug: string }
+  | { type: 'mission'; cell: CellDef }
+  | { type: 'reload'; agentSlug: string };
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  card?: CardData;
 }
 interface Person {
   slug: string; // 폴더 slug (agent name) — 예: uj_choe
@@ -71,6 +81,10 @@ export function HomeChat() {
   const [given, setGiven] = useState<string | null>(null);
   const [slug, setSlug] = useState<string | null>(null);
   const [stage, setStage] = useState<'askName' | 'chatting'>('askName');
+  /** 빙고 셀 자동 재조회 트리거 (검증/적용 후 ++) */
+  const [bingoRefreshKey, setBingoRefreshKey] = useState(0);
+  /** 현재 학습자가 채팅 입력으로 풀어야 할 셀 (활성 시 입력 = claim) */
+  const [activeMissionCell, setActiveMissionCell] = useState<CellDef | null>(null);
 
   const rosterRef = useRef<Person[]>([]);
   const sessionRef = useRef<string>('');
@@ -129,6 +143,13 @@ export function HomeChat() {
           sessionRef.current = p.slug ? `user-${p.slug}` : localStorage.getItem(SESSION_KEY) ?? `anon-${Date.now()}`;
           await loadHistory(sessionRef.current);
           await typeOut([`다시 왔네요, ${p.given}님! 👋`, '오늘 막힌 거 있으면 바로 물어봐요.']);
+          // 학습자 slug가 있으면 빙고판 카드 자동 표시 (재진입)
+          if (p.slug) {
+            setMessages((m) => [
+              ...m,
+              { role: 'assistant', content: '', card: { type: 'bingo', agentSlug: p.slug! } },
+            ]);
+          }
           setBusy(false);
           return;
         } catch {
@@ -141,6 +162,94 @@ export function HomeChat() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 셀 클릭 → 미션 카드를 메시지로 띄움. 자동 검증 셀이면 즉시 verify 시도.
+  const handleBingoCellClick = (cell: CellDef, status: CellStatus) => {
+    if (status === 'done') {
+      setMessages((m) => [
+        ...m,
+        { role: 'assistant', content: `🎉 ${cell.id}번 (${cell.title}) 이미 완료했어요!` },
+      ]);
+      return;
+    }
+    setMessages((m) => [
+      ...m,
+      { role: 'assistant', content: '', card: { type: 'mission', cell } },
+    ]);
+    if (cell.method === 'chat_input') {
+      setActiveMissionCell(cell);
+    }
+  };
+
+  // 개별 셀 검증 (자동 검증 셀에서 "검증하기" 버튼)
+  const verifyCell = async (cell: CellDef | null) => {
+    if (!cell || !slug) return;
+    setBusy(true);
+    try {
+      const r = await fetch('/api/runtime/bingo/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent: slug, cell: cell.id }),
+      });
+      const data = (await r.json()) as { passed: boolean; reason: string; hint?: string };
+      if (data.passed) {
+        setMessages((m) => [
+          ...m,
+          { role: 'assistant', content: `✅ ${cell.id}번 (${cell.title}) 통과! ${data.reason}` },
+        ]);
+        setBingoRefreshKey((k) => k + 1);
+      } else {
+        setMessages((m) => [
+          ...m,
+          {
+            role: 'assistant',
+            content: `🔄 아직이에요: ${data.reason}${data.hint ? `\n\n💡 ${data.hint}` : ''}`,
+          },
+        ]);
+      }
+    } catch (e) {
+      setMessages((m) => [
+        ...m,
+        { role: 'assistant', content: `⚠ 검증 실패: ${(e as Error).message}` },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 채팅 입력 셀 클레임 (텍스트 저장)
+  const claimChatCell = async (cell: CellDef, text: string) => {
+    if (!slug) return;
+    setBusy(true);
+    try {
+      const r = await fetch('/api/runtime/bingo/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent: slug, cell: cell.id, text }),
+      });
+      const data = (await r.json()) as { passed: boolean; reason: string };
+      if (data.passed) {
+        setMessages((m) => [
+          ...m,
+          { role: 'assistant', content: `🎉 ${cell.id}번 (${cell.title}) 저장됐어요!` },
+        ]);
+        setBingoRefreshKey((k) => k + 1);
+        setActiveMissionCell(null);
+      } else {
+        setMessages((m) => [
+          ...m,
+          { role: 'assistant', content: `🔄 ${data.reason}` },
+        ]);
+      }
+    } catch (e) {
+      setMessages((m) => [
+        ...m,
+        { role: 'assistant', content: `⚠ 저장 실패: ${(e as Error).message}` },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // 실제 LLM 코치 호출 — 사용자(agentName=slug) 로그로 저장 + 호칭(userName) 전달
   const askCoach = async (message: string, sid: string, s: string | null, g: string | null) => {
@@ -193,6 +302,21 @@ export function HomeChat() {
 
       // 입력한 이름을 첫 메시지로 보내면 코치(LLM)가 환영 + 오늘 미션 + /start 안내를 생성
       await askCoach(cleaned, sid, s, g);
+
+      // 매칭된 학습자면 빙고판 자동 표시
+      if (s) {
+        setMessages((m) => [
+          ...m,
+          { role: 'assistant', content: '', card: { type: 'bingo', agentSlug: s } },
+        ]);
+      }
+      return;
+    }
+
+    // 활성 미션이 있고 채팅 입력 셀이면 claim
+    if (activeMissionCell && activeMissionCell.method === 'chat_input') {
+      setMessages((m) => [...m, { role: 'user', content }]);
+      await claimChatCell(activeMissionCell, content);
       return;
     }
 
@@ -223,14 +347,65 @@ export function HomeChat() {
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} fade-up`}>
-            <div
-              className={`max-w-[85%] px-4 py-3 text-sm whitespace-pre-wrap leading-relaxed ${
-                m.role === 'user' ? 'bg-ink text-paper' : 'bg-sand border-2 border-ink'
-              }`}
-            >
-              {m.content}
-            </div>
+          <div key={i} className="space-y-2 fade-up">
+            {m.content && (
+              <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[85%] px-4 py-3 text-sm whitespace-pre-wrap leading-relaxed ${
+                    m.role === 'user' ? 'bg-ink text-paper' : 'bg-sand border-2 border-ink'
+                  }`}
+                >
+                  {m.content}
+                </div>
+              </div>
+            )}
+            {m.card && (
+              <div className="max-w-[92%]">
+                {m.card.type === 'oauth' && (
+                  <OAuthCard agentSlug={m.card.agentSlug} done={m.card.done} />
+                )}
+                {m.card.type === 'bingo' && (
+                  <BingoBoard
+                    agentSlug={m.card.agentSlug}
+                    refreshKey={bingoRefreshKey}
+                    onCellClick={(cell, status) => handleBingoCellClick(cell, status)}
+                  />
+                )}
+                {m.card.type === 'mission' && (
+                  <div className="brut p-3 bg-paper">
+                    <div className="font-display font-bold text-sm mb-1">
+                      🎯 {m.card.cell.id}. {m.card.cell.title}
+                    </div>
+                    <div className="text-xs leading-relaxed mb-2">{m.card.cell.description}</div>
+                    <div className="font-mono text-[10px] text-muted bg-sand border-2 border-ink p-2 mb-2">
+                      💡 {m.card.cell.hint}
+                    </div>
+                    {m.card.cell.method === 'chat_input' ? (
+                      <div className="font-mono text-[10px] text-muted">
+                        ↓ 아래 입력창에 답변을 적어주세요. (예: "1번 이모지, 2번..." )
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => verifyCell(m.card && m.card.type === 'mission' ? m.card.cell : null)}
+                        className="btn btn-dark text-xs"
+                      >
+                        검증하기 →
+                      </button>
+                    )}
+                  </div>
+                )}
+                {m.card.type === 'reload' && (
+                  <ReloadButton
+                    agentSlug={m.card.agentSlug}
+                    onComplete={(r) => {
+                      if (r.ok) {
+                        setBingoRefreshKey((k) => k + 1);
+                      }
+                    }}
+                  />
+                )}
+              </div>
+            )}
           </div>
         ))}
 
