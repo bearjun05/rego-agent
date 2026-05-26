@@ -299,6 +299,37 @@ body::before {
   background: var(--th-accent);
 }
 
+/* Confetti rain — RevealModal first step */
+@keyframes confettiRain {
+  0%   { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(540deg); opacity: 0.4; }
+}
+.confetti-rain {
+  position: absolute;
+  width: 8px; height: 12px;
+  pointer-events: none;
+  animation: confettiRain linear forwards;
+}
+
+/* Reveal step transition */
+@keyframes stepIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.step-in { animation: stepIn 280ms cubic-bezier(.34,1.56,.64,1) both; }
+
+/* Brick stack assembly (RevealModal 마지막) */
+@keyframes brickDrop {
+  0%   { transform: translateY(-30px); opacity: 0; }
+  60%  { transform: translateY(4px); opacity: 1; }
+  100% { transform: translateY(0); }
+}
+.brick-drop { animation: brickDrop 400ms cubic-bezier(.34,1.56,.64,1) both; }
+.brick-drop:nth-child(1) { animation-delay: 0ms; }
+.brick-drop:nth-child(2) { animation-delay: 120ms; }
+.brick-drop:nth-child(3) { animation-delay: 240ms; }
+.brick-drop:nth-child(4) { animation-delay: 360ms; }
+
 /* 스크롤바 */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

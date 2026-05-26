@@ -28,16 +28,24 @@ export default function HomePage() {
           모델 + 도구 + 규칙 + 트리거를 블록처럼 끼워 맞춰, 나만의 비서를 만들어요.
         </p>
 
-        {/* 공식 */}
-        <div className="mt-6 flex flex-wrap items-stretch gap-2 lg:gap-3">
+        {/* 공식 — 4축 컬러 자동 적용 (테마별 prim-1~4) */}
+        <div className="mt-6 flex flex-wrap items-stretch gap-2 lg:gap-3 stagger">
           {[
-            { ko: '모델', en: 'LLM' },
-            { ko: '도구', en: 'Tools' },
-            { ko: '규칙', en: 'Prompt' },
-            { ko: '트리거', en: 'When?' },
+            { ko: '모델', en: 'LLM', tone: 'var(--th-primary-3)' },
+            { ko: '도구', en: 'Tools', tone: 'var(--th-primary-2)' },
+            { ko: '규칙', en: 'Prompt', tone: 'var(--th-primary-3)' },
+            { ko: '트리거', en: 'When?', tone: 'var(--th-primary-1)' },
           ].map((block, i) => (
             <div key={block.en} className="flex items-stretch gap-2 lg:gap-3">
-              <div className="brut-tight px-3 py-2 min-w-[80px] lg:min-w-[100px]">
+              <div
+                className="brut-tight px-3 py-2 min-w-[80px] lg:min-w-[100px] relative"
+                style={{ backgroundColor: `color-mix(in srgb, ${block.tone} 18%, var(--th-bg))` }}
+              >
+                <span
+                  aria-hidden
+                  className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full"
+                  style={{ background: block.tone }}
+                />
                 <div className="font-mono text-[10px] uppercase tracking-wider text-muted">
                   {block.en}
                 </div>
@@ -50,7 +58,7 @@ export default function HomePage() {
               </div>
             </div>
           ))}
-          <div className="px-3 py-2 min-w-[80px] lg:min-w-[100px] border-2 border-ink bg-ink text-paper">
+          <div className="px-3 py-2 min-w-[80px] lg:min-w-[100px] border-brick border-line bg-ink text-paper">
             <div className="font-mono text-[10px] uppercase tracking-wider opacity-70">Agent</div>
             <div className="font-display font-extrabold text-lg lg:text-xl leading-tight">
               에이전트

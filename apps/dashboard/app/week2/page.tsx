@@ -6,6 +6,7 @@ import { ToolUsageChart } from '@/components/week2/ToolUsageChart';
 import { TelegramGallery } from '@/components/week2/TelegramGallery';
 import { CellClearRates } from '@/components/week2/CellClearRates';
 import { BlueprintGallery } from '@/components/week2/BlueprintGallery';
+import { BrickWall } from '@/components/week2/BrickWall';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,11 @@ export default function Week2Page() {
         <p className="mt-4 text-base lg:text-lg text-muted max-w-2xl leading-relaxed">
           학습자 16명이 만들고 있는 에이전트들을 한눈에. 진행률·도구·텔레그램 메시지·청사진까지.
         </p>
+      </section>
+
+      {/* Row 0: 16명 Brick Wall (큰 시각화) */}
+      <section className="mb-4">
+        <BrickWall />
       </section>
 
       {/* Row 1: Leaderboard + Live Feed */}

@@ -59,10 +59,12 @@ export function RevealModal({
   const current = STEPS[step]!;
 
   return (
-    <div className="fixed inset-0 z-50 bg-ink/70 flex items-center justify-center p-4 fade-up">
-      <div className="brut bg-paper max-w-[820px] w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-fade" style={{ background: 'color-mix(in srgb, var(--th-fg) 70%, transparent)' }}>
+      {/* Confetti rain — 1단계에서만 */}
+      {step === 0 && <ConfettiRain />}
+      <div className="brut max-w-[820px] w-full max-h-[90vh] overflow-y-auto relative">
         {/* 헤더 */}
-        <div className="border-b-2 border-ink p-4 flex items-center justify-between sticky top-0 bg-paper">
+        <div className="border-b-brick border-line p-4 flex items-center justify-between sticky top-0 bg-paper z-10">
           <div>
             <div className="font-mono text-[10px] uppercase text-muted">
               빙고 리빌 · {step + 1}/{STEPS.length}
@@ -78,7 +80,7 @@ export function RevealModal({
         </div>
 
         {/* 본문 */}
-        <div className="p-6">
+        <div key={current.id} className="p-6 step-in">
           {!data && (
             <div className="font-mono text-sm text-muted text-center py-12">불러오는 중...</div>
           )}
@@ -196,11 +198,12 @@ function StatsStep({ stats, blueprint }: { stats: Stats; blueprint: Blueprint })
 }
 
 function MetaphorStep() {
+  // 4축 = primary 컬러 토큰을 사용해 테마에 자동 반응
   const blocks = [
-    { color: '#E8F2FB', stud: '#4A8DD1', label: '🟦 트리거', desc: '"언제 깨어날까?"', ex: 'slack.mention / cron / button' },
-    { color: '#FFF8E0', stud: '#F4D300', label: '🟨 도구', desc: '"뭘 할 수 있을까?"', ex: 'slack.* / telegram.* / llm.*' },
-    { color: '#F2E8FB', stud: '#9B6AC8', label: '🟪 규칙', desc: '"어떻게 판단할까?"', ex: 'prompts/classify.md' },
-    { color: '#E8FBF2', stud: '#6AC89B', label: '🟩 상태', desc: '"뭘 기억할까?"', ex: 'ctx.state.set / get' },
+    { tone: 'var(--th-primary-1)', label: '🟦 트리거', desc: '"언제 깨어날까?"', ex: 'slack.mention / cron / button' },
+    { tone: 'var(--th-primary-2)', label: '🟨 도구', desc: '"뭘 할 수 있을까?"', ex: 'slack.* / telegram.* / llm.*' },
+    { tone: 'var(--th-primary-3)', label: '🟪 규칙', desc: '"어떻게 판단할까?"', ex: 'prompts/classify.md' },
+    { tone: 'var(--th-primary-4)', label: '🟩 상태', desc: '"뭘 기억할까?"', ex: 'ctx.state.set / get' },
   ];
   return (
     <div className="space-y-4">
@@ -209,10 +212,17 @@ function MetaphorStep() {
       </p>
       <div className="grid grid-cols-2 gap-3">
         {blocks.map((b) => (
-          <div key={b.label} className="brut p-3 relative" style={{ backgroundColor: b.color }}>
+          <div
+            key={b.label}
+            className="brick-drop brut p-3 relative"
+            style={{
+              backgroundColor: `color-mix(in srgb, ${b.tone} 20%, var(--th-bg))`,
+              borderColor: b.tone,
+            }}
+          >
             <div
               className="absolute top-2 right-2 w-3 h-3 rounded-full"
-              style={{ backgroundColor: b.stud }}
+              style={{ backgroundColor: b.tone }}
             />
             <div className="font-display font-bold text-sm">{b.label}</div>
             <div className="font-mono text-[11px] mt-1">{b.desc}</div>
@@ -224,6 +234,34 @@ function MetaphorStep() {
         4축을 <strong>다른 모양으로 끼우면</strong> 완전히 다른 에이전트가 돼요. 회의 알리미·뉴스
         요약기·내 스케줄 알림이 — 다 같은 4축 다른 조합.
       </p>
+    </div>
+  );
+}
+
+function ConfettiRain() {
+  // 30개의 confetti가 위에서 떨어짐 (4가지 색)
+  const colors = ['var(--th-accent)', 'var(--th-primary-1)', 'var(--th-primary-2)', 'var(--th-primary-4)'];
+  return (
+    <div className="fixed inset-0 pointer-events-none overflow-hidden">
+      {Array.from({ length: 30 }).map((_, i) => {
+        const left = (i / 30) * 100 + Math.random() * 5;
+        const delay = Math.random() * 1500;
+        const dur = 2200 + Math.random() * 1400;
+        return (
+          <span
+            key={i}
+            className="confetti-rain"
+            style={{
+              left: `${left}%`,
+              top: -20,
+              background: colors[i % colors.length],
+              animationDelay: `${delay}ms`,
+              animationDuration: `${dur}ms`,
+              borderRadius: i % 2 === 0 ? '2px' : '50%',
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
