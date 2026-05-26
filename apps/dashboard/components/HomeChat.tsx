@@ -54,6 +54,18 @@ function matchPerson(input: string, roster: Person[]): Person | null {
   );
 }
 
+// "안녕"·"하이"·"ㅎㅇ" 같은 일반 인사 표현 — 이름으로 받아들이지 말 것
+const GREETING_WORDS = new Set([
+  '안녕', '하이', '하잉', '헬로', '여보세요', '오', '응', '엉', '예', '네',
+  'hi', 'hello', 'hey', 'yo', 'ㅎㅇ', 'ㅎㅎ', 'ㅋㅋ', 'ㅠㅠ', 'ㄱㄱ', 'ㅇㅋ',
+]);
+function looksLikeGreeting(text: string): boolean {
+  const clean = text.replace(/[ㅋㅎ\s.,!?~ㅜㅠ]/g, '').toLowerCase();
+  if (clean.length === 0) return true;
+  if (clean.length === 1) return true; // 한 글자는 이름 아님
+  return GREETING_WORDS.has(clean);
+}
+
 // 2문장 초과 텍스트를 여러 메시지로 분할. 줄바꿈 블록(목록 등)은 통째로 유지.
 function splitChunks(text: string, maxSentences = 2): string[] {
   const blocks = text.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
@@ -446,7 +458,25 @@ export function HomeChat() {
           .replace(/(이에요|예요|입니다|이야|야|라고\s*해요?)\s*$/i, '')
           .trim() || content;
 
+      // 일반 인사어 / 너무 짧은 입력은 이름으로 받아들이지 않음
+      if (looksLikeGreeting(cleaned)) {
+        await typeOut([
+          '안녕하세요! 🐱',
+          '근데 이름이 뭐예요? (예: "최웅준" 또는 그냥 "웅준")',
+        ]);
+        return; // 이름 단계 유지
+      }
+
       const person = matchPerson(cleaned, rosterRef.current);
+      // roster에 없으면서 + 너무 짧으면 (한글 2자 미만) 한 번 더 확인
+      if (!person && cleaned.length < 2) {
+        await typeOut([
+          `"${cleaned}"…? 이름 맞아요?`,
+          '풀네임이나 이름 두 글자 이상으로 알려주시면 도와드릴게요.',
+        ]);
+        return;
+      }
+
       const g = person ? givenName(person.displayName) : givenName(cleaned);
       const s = person?.slug ?? null;
       const sid = s ? `user-${s}` : localStorage.getItem(SESSION_KEY) ?? `anon-${Date.now()}`;
