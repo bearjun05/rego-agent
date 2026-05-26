@@ -12,9 +12,18 @@ import {
   auditLogs,
   slackUserTokens,
 } from '@rego/db';
-import { listAgents, getAgent } from '../agent-registry.js';
+import { listAgents, getAgent, reloadAgent } from '../agent-registry.js';
 import { audit } from '../audit.js';
 import { analyzeAgent } from '../analyzer.js';
+import { fetchLearnerFolder, isSafeAgentName, agentFolderExists } from '../git-sync.js';
+import { bindCronTriggers } from '../agent-cron-bind.js';
+import { refreshSlackUserMap } from '../agent-runner.js';
+import { syncManifestToolsForAgent, ensureAgentRow } from '../manifest-sync.js';
+import { getCronScheduler } from '../cron-scheduler.js';
+import { createLogger } from '../logger.js';
+
+const reloadLog = createLogger('api:reload');
+const inFlightReloads = new Map<string, Promise<unknown>>();
 
 export function createAgentsApi() {
   const r = new Hono();
@@ -212,5 +221,82 @@ export function createAgentsApi() {
     });
   });
 
+  /**
+   * T5 Hot reload — 학습자가 본인 브랜치(learner/<name>) push 후
+   * "내 코드 적용하기" 클릭. 5초 안에 그 학습자 폴더만 새 버전으로 교체.
+   */
+  r.post('/:name/reload', async (c) => {
+    const name = c.req.param('name');
+    if (!isSafeAgentName(name)) {
+      return c.json({ ok: false, error: 'invalid agent name' }, 400);
+    }
+    if (inFlightReloads.has(name)) {
+      return c.json({ ok: false, error: 'reload already in progress' }, 429);
+    }
+    const task = doHotReload(name);
+    inFlightReloads.set(name, task);
+    try {
+      const result = await task;
+      return c.json(result, result.ok ? 200 : 500);
+    } finally {
+      inFlightReloads.delete(name);
+    }
+  });
+
   return r;
+}
+
+async function doHotReload(name: string): Promise<
+  | { ok: true; sha: string; branch: string; cronCount: number }
+  | { ok: false; error: string; stage: string }
+> {
+  // 1. 옛 cron 트리거 해제 (모듈 캐시 비우기 전에)
+  getCronScheduler().cancelAgent(name);
+
+  // 2. git fetch + 부분 checkout
+  let sha: string;
+  let branch: string;
+  try {
+    const r = await fetchLearnerFolder(name);
+    sha = r.sha;
+    branch = r.branch;
+  } catch (err) {
+    reloadLog.error(`fetch failed for ${name}`, err);
+    return { ok: false, error: (err as Error).message, stage: 'fetch' };
+  }
+
+  if (!agentFolderExists(name)) {
+    return {
+      ok: false,
+      error: `agents/${name}/ 폴더가 그 브랜치에 없어요`,
+      stage: 'after-checkout',
+    };
+  }
+
+  // 3. 모듈 reload (ESM 캐시 우회)
+  let agent;
+  try {
+    agent = await reloadAgent(name);
+  } catch (err) {
+    reloadLog.error(`module reload failed for ${name}`, err);
+    return { ok: false, error: (err as Error).message, stage: 'module-reload' };
+  }
+  if (!agent) {
+    return { ok: false, error: 'agent not found after reload', stage: 'module-reload' };
+  }
+
+  // 4. cron 재등록
+  const cronCount = bindCronTriggers(agent);
+
+  // 5. DB row + 매핑 동기 (실패해도 reload 자체는 성공으로 보고)
+  try {
+    await ensureAgentRow(agent);
+    await syncManifestToolsForAgent(agent);
+    await refreshSlackUserMap();
+  } catch (err) {
+    reloadLog.warn(`post-reload sync warned for ${name}`, err);
+  }
+
+  reloadLog.info(`reload OK: ${name} @ ${sha.slice(0, 8)} (${cronCount} cron)`);
+  return { ok: true, sha, branch, cronCount };
 }

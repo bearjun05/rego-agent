@@ -22,7 +22,7 @@ node_modules
 coverage
 
 # VCS / 에디터 / 메타
-.git
+# .git은 hot reload(T5)가 학습자 브랜치 fetch에 필요 → 이미지에 포함 (~3MB)
 .gitignore
 .github
 .husky

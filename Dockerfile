@@ -3,6 +3,9 @@
 # tsx로 TS 소스를 직접 실행 (workspace 패키지들이 src/*.ts를 export)
 # ─────────────────────────────────────────────────────────
 FROM node:20-slim AS base
+# git: T5 hot reload(학습자 브랜치 부분 checkout)에 필요
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
 WORKDIR /app
 

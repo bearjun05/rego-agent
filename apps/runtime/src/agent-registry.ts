@@ -130,6 +130,11 @@ export async function reloadAgent(name: string): Promise<LoadedAgent | null> {
   return loaded;
 }
 
+/** agent를 registry에서 제거 (T5 hot reload — 옛 인스턴스 청소) */
+export function unregisterAgent(name: string): void {
+  _state?.agents.delete(name);
+}
+
 export async function reloadAll(): Promise<Map<string, LoadedAgent>> {
   return loadAllAgents();
 }
