@@ -14,12 +14,23 @@ import { ingestSlackMention } from '../slack-ingest.js';
 
 const log = createLogger('webhook:slack');
 
+interface SlackAuthorization {
+  team_id?: string;
+  user_id?: string;
+  is_bot?: boolean;
+  is_enterprise_install?: boolean;
+}
+
 interface SlackEventPayload {
   type: 'url_verification' | 'event_callback';
   challenge?: string;
   team_id?: string;
   event_id?: string;
   event?: RawSlackEvent;
+  /** user-scoped events: 이 이벤트를 "수신권한 가진" 사용자 목록.
+   *  authorizations[0].user_id == 이 이벤트가 그 사람 시야에서 발생한 학습자.
+   *  → 그 학습자의 agent로만 라우팅 (cross-routing 원천차단). */
+  authorizations?: SlackAuthorization[];
 }
 
 export function createSlackRouter() {
@@ -144,11 +155,18 @@ async function handleSlackEvent(
     raw: payload,
   };
 
-  // 저장(dedup: channel+ts) + 매칭 에이전트 실행 — Tier1/Tier2 공유 진입점.
+  // user-scoped events: authorizations[0].user_id == 이 이벤트가 그 학습자 시야에서
+  //   발생했음을 알려줌(그 학습자가 앱을 OAuth로 설치했기 때문에 이벤트가 옴).
+  //   → 그 학습자의 agent로만 라우팅. cross-routing 원천차단.
+  // 레거시 forward(second-brain → rego) 경로는 authorizations 없음 → restrict 미지정.
+  const authedUserId = payload.authorizations?.[0]?.user_id;
+
+  // 저장(dedup: channel+ts) + 매칭 에이전트 실행.
   await ingestSlackMention(agentEvent, {
     source: 'forward',
     eventId: payload.event_id ?? null,
     teamId: payload.team_id,
     raw: payload,
+    restrictToSlackUserId: authedUserId,
   });
 }
