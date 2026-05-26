@@ -4,6 +4,7 @@ import { BingoBoard, type CellDef, type CellStatus } from './BingoBoard';
 import { OAuthCard } from './OAuthCard';
 import { ReloadButton } from './ReloadButton';
 import { MonitorCard } from './MonitorCard';
+import { RevealModal } from './RevealModal';
 
 type CardData =
   | { type: 'oauth'; agentSlug: string; done?: boolean }
@@ -94,6 +95,9 @@ export function HomeChat() {
   const prevCellsRef = useRef<Record<number, 'done' | 'pending'> | null>(null);
   /** 첫 진입에서 monitor 카드 표시 여부 */
   const monitorShownRef = useRef(false);
+  /** 빙고 6+ 리빌 모달 (한 번만) */
+  const [revealOpen, setRevealOpen] = useState(false);
+  const revealShownRef = useRef(false);
 
   const rosterRef = useRef<Person[]>([]);
   const sessionRef = useRef<string>('');
@@ -234,7 +238,7 @@ export function HomeChat() {
     };
   }, [slug]);
 
-  // 빙고 상태 변화 감지 — 새로 done된 셀 있으면 축하 + 다음 셀 추천
+  // 빙고 상태 변화 감지 — 새로 done된 셀 있으면 축하 + 다음 셀 추천 + 6+에서 리빌
   const checkBingoProgress = async () => {
     if (!slug) return;
     try {
@@ -250,11 +254,16 @@ export function HomeChat() {
         for (const id of newlyDone) {
           insolMessage(`🎉 셀 ${id} 클리어!`);
         }
+        const doneCount = Object.values(current).filter((s) => s === 'done').length;
+        // 6+ 도달 시 리빌 (한 번만)
+        if (doneCount >= 6 && !revealShownRef.current) {
+          revealShownRef.current = true;
+          setTimeout(() => setRevealOpen(true), 1000);
+        }
         // 다음 셀 추천
         if (newlyDone.length > 0) {
           const nextPending = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((n) => current[n] !== 'done');
           if (nextPending) {
-            const doneCount = Object.values(current).filter((s) => s === 'done').length;
             if (doneCount === 9) {
               insolMessage('🏁 빙고 9개 완주! 진짜 수고하셨어요. 잠시 쉬다 와요 ☕');
             } else {
@@ -264,6 +273,10 @@ export function HomeChat() {
             }
           }
         }
+      } else {
+        // 첫 로드 — 이미 6+면 즉시 리빌 마킹 (재진입은 모달 안 띄움)
+        const doneCount = Object.values(current).filter((s) => s === 'done').length;
+        if (doneCount >= 6) revealShownRef.current = true;
       }
       prevCellsRef.current = current;
     } catch {}
@@ -289,7 +302,8 @@ export function HomeChat() {
   }, [slug, stage, busy, typing]);
 
   // 셀 클릭 → 미션 카드를 메시지로 띄움. 자동 검증 셀이면 즉시 verify 시도.
-  const handleBingoCellClick = (cell: CellDef, status: CellStatus) => {
+  // + 인솔이가 셀별 코드 스니펫 자동 안내 (cell-guide API)
+  const handleBingoCellClick = async (cell: CellDef, status: CellStatus) => {
     if (status === 'done') {
       setMessages((m) => [
         ...m,
@@ -303,6 +317,21 @@ export function HomeChat() {
     ]);
     if (cell.method === 'chat_input') {
       setActiveMissionCell(cell);
+    } else if (slug) {
+      // 자동 코칭 — 학습자 코드 상태에 맞춘 안내 + 코드 스니펫
+      try {
+        const res = await fetch(
+          `/api/runtime/insol/cell-guide?cell=${cell.id}&agent=${encodeURIComponent(slug)}`,
+        );
+        const guide = (await res.json()) as { nextStep?: string; snippet?: string };
+        if (guide.snippet) {
+          insolMessage(
+            `다음 한 줄: ${guide.nextStep}\n\n복붙용 스니펫:\n\`\`\`ts\n${guide.snippet}\n\`\`\``,
+          );
+        } else if (guide.nextStep) {
+          insolMessage(guide.nextStep);
+        }
+      } catch {}
     }
   };
 
@@ -440,6 +469,30 @@ export function HomeChat() {
 
     lastActivityRef.current = Date.now(); // 사용자 입력 = 활동
 
+    // PAT 자동 감지 + 제출 (사용자 메시지에 토큰 패턴 있으면)
+    const patMatch = content.match(/(github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9_]+)/);
+    if (patMatch && slug) {
+      // 토큰 마스킹해서 user 메시지 표시 (히스토리에 평문 안 남기게)
+      const masked = patMatch[1]!.slice(0, 14) + '…' + patMatch[1]!.slice(-4);
+      setMessages((m) => [...m, { role: 'user', content: content.replace(patMatch[1]!, masked) }]);
+      try {
+        const r = await fetch('/api/runtime/insol/pat-submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agent: slug, token: patMatch[1] }),
+        });
+        const data = (await r.json()) as { ok?: boolean; message?: string; error?: string };
+        insolMessage(
+          data.ok
+            ? `✅ GitHub Token 받았어요! (${masked})\n운영자에게 전달했어요. 잠시 후 본인 브랜치(learner/${slug})가 자동 생성될 거예요.`
+            : `⚠ ${data.error ?? '제출 실패'}`,
+        );
+      } catch (e) {
+        insolMessage(`⚠ ${(e as Error).message}`);
+      }
+      return;
+    }
+
     // 활성 미션이 있고 채팅 입력 셀이면 claim
     if (activeMissionCell && activeMissionCell.method === 'chat_input') {
       setMessages((m) => [...m, { role: 'user', content }]);
@@ -459,7 +512,15 @@ export function HomeChat() {
   const showSuggestions =
     stage === 'chatting' && !busy && !typing && messages.filter((m) => m.role === 'user').length === 0;
 
+  const doneCount = prevCellsRef.current
+    ? Object.values(prevCellsRef.current).filter((s) => s === 'done').length
+    : 0;
+
   return (
+    <>
+      {revealOpen && slug && (
+        <RevealModal agentSlug={slug} onClose={() => setRevealOpen(false)} />
+      )}
     <div className="brut bg-paper flex flex-col h-[68vh] min-h-[460px] max-h-[720px]">
       <div className="border-b-2 border-ink p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -471,6 +532,21 @@ export function HomeChat() {
             </div>
           </div>
         </div>
+        {slug && (
+          <div className="hidden sm:flex items-center gap-2 mr-2">
+            <span className="font-mono text-[10px] uppercase text-muted">조립</span>
+            <div className="brick-row">
+              {[1,2,3,4,5,6,7,8,9].map((n) => (
+                <span
+                  key={n}
+                  className={`brick-stud ${n <= doneCount ? 'brick-stud-on' : ''}`}
+                  title={`${n <= doneCount ? '✓' : '○'} ${n}/9`}
+                />
+              ))}
+            </div>
+            <span className="font-mono text-[10px] text-muted">{doneCount}/9</span>
+          </div>
+        )}
         <span className="font-mono text-[10px] uppercase text-muted hidden sm:block">
           WEEK 1 · ONBOARDING
         </span>
@@ -591,5 +667,6 @@ export function HomeChat() {
         </button>
       </form>
     </div>
+    </>
   );
 }

@@ -33,6 +33,8 @@ import { createChatApi } from './api/chat.js';
 import { createSseEndpoint } from './api/sse.js';
 import { createOAuthApi } from './api/oauth.js';
 import { createBingoApi } from './api/bingo.js';
+import { createInsolApi } from './api/insol.js';
+import { createWeek2Api } from './api/week2.js';
 
 const log = createLogger('server');
 
@@ -73,6 +75,8 @@ export async function buildApp() {
   // Tier2 유저 OAuth (참가자가 본인 Slack 연결 — 비공개 채널 폴링용)
   app.route('/oauth', createOAuthApi());
   app.route('/api/bingo', createBingoApi());
+  app.route('/api/insol', createInsolApi());
+  app.route('/api/week2', createWeek2Api());
 
   // Admin (audit는 /api/feed/audit 에 합쳤음)
 

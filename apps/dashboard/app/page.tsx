@@ -11,8 +11,17 @@ export default function HomePage() {
         <div className="font-mono text-xs uppercase tracking-widest text-muted mb-2">
           SPARTA · AGENT STUDY · 8 WEEKS
         </div>
-        <h1 className="font-display font-extrabold text-5xl lg:text-7xl leading-none tracking-tight">
-          레고처럼<br />
+        <h1 className="font-display font-extrabold text-5xl lg:text-7xl leading-none tracking-tight relative">
+          <span className="inline-flex items-center gap-3 flex-wrap">
+            레고처럼
+            <span className="brick-row" aria-hidden>
+              <span className="brick-stud brick-stud-on" style={{width:12, height:12}} />
+              <span className="brick-stud brick-stud-on" style={{width:12, height:12}} />
+              <span className="brick-stud brick-stud-on" style={{width:12, height:12}} />
+              <span className="brick-stud brick-stud-on" style={{width:12, height:12}} />
+            </span>
+          </span>
+          <br />
           <span className="text-rust">조립하는 에이전트.</span>
         </h1>
         <p className="mt-5 text-base lg:text-lg text-muted max-w-2xl leading-relaxed">

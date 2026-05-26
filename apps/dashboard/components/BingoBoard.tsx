@@ -69,8 +69,8 @@ export function BingoBoard({
   return (
     <div className="brut p-3 bg-paper">
       <div className="flex items-center justify-between mb-2">
-        <span className="font-display font-bold text-sm">🎯 빙고판</span>
-        <span className="font-mono text-[10px] text-muted">{doneCount}/9 완료</span>
+        <span className="font-display font-bold text-sm">🧱 빙고판</span>
+        <span className="font-mono text-[10px] text-muted">{doneCount}/9 조립됨</span>
       </div>
       <div className="grid grid-cols-3 gap-1">
         {data.defs.map((def) => {
@@ -80,10 +80,17 @@ export function BingoBoard({
             <button
               key={def.id}
               onClick={() => onCellClick(def, status)}
-              className={`aspect-square p-2 border-2 border-ink text-left transition-colors hover:bg-sand ${
-                done ? 'bg-ink text-paper' : 'bg-paper'
+              className={`aspect-square p-2 border-2 border-ink text-left transition-colors hover:bg-sand relative ${
+                done ? 'bg-ink text-paper brick' : 'bg-paper'
               }`}
             >
+              {/* stud */}
+              <span
+                className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ${
+                  done ? 'bg-paper' : 'bg-ink/15'
+                }`}
+                aria-hidden
+              />
               <div className="font-mono text-[10px] opacity-70 mb-0.5">
                 {def.id}. {done ? '✓' : '○'}
               </div>

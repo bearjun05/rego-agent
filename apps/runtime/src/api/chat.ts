@@ -19,6 +19,7 @@ import { env } from '../env.js';
 import { createLogger } from '../logger.js';
 import { CELL_DEFS, CELL_IDS, type CellId } from '../bingo-rules.js';
 import { checkAllCells } from '../bingo-checks.js';
+import { loadLearnerCode, buildOperatorOverview } from '../insol-analyzer.js';
 
 const log = createLogger('chat');
 
@@ -90,8 +91,10 @@ export function createChatApi() {
     const callName = userName ?? displayName ?? null;
     const isFirstTurn = history.filter((h) => h.role === 'assistant').length === 0;
 
-    // 빙고 진행 상태 (agentName 있을 때만) — 시스템 프롬프트에 주입해 인솔이가 인지
+    // 빙고 진행 상태 + 학습자 코드 + 운영자 모드 — 시스템 프롬프트 컨텍스트
     let bingoSummary = '';
+    let codeContext = '';
+    let operatorContext = '';
     if (agentName) {
       try {
         const cells = await checkAllCells(agentName);
@@ -111,6 +114,37 @@ export function createChatApi() {
           }).join('\n');
       } catch (err) {
         log.warn('bingo status load failed', err);
+      }
+
+      // 학습자 코드 핵심 정보 (요약, 전체 코드는 길어서 안 박음)
+      try {
+        const code = await loadLearnerCode(agentName);
+        if (code.handlerExists) {
+          codeContext = [
+            '[학습자 현재 코드 상태]',
+            `핸들러 라인수: ${code.handlerLines}`,
+            `등록 트리거: ${code.triggers.join(', ') || '(없음)'}`,
+            `호출하는 도구: ${code.usedTools.join(', ') || '(없음)'}`,
+          ].join('\n');
+        } else {
+          codeContext = '[학습자 코드 상태] agents/' + agentName + '/handler.ts 가 아직 없음';
+        }
+      } catch {}
+
+      // 운영자(uj_choe) 면 전체 학습자 데이터 추가
+      if (agentName === 'uj_choe') {
+        try {
+          const ov = await buildOperatorOverview();
+          operatorContext = [
+            '',
+            '[운영자 모드 — 너는 지금 운영자(준)와 대화 중]',
+            `전체 학습자: ${ov.total} / 완주: ${ov.done} / 활동중: ${ov.active} / 막힘: ${ov.stuck}`,
+            `상위 진행자: ${ov.topPerformers.map((p) => `${p.name}(${p.cellsDone})`).join(', ')}`,
+            `막힌 학습자: ${ov.stuckAgents.map((a) => `${a.name}(${a.cellsDone}/9, ${a.minsSinceActivity}분 정체)`).join(', ') || '(없음)'}`,
+            `인기 도구: ${ov.toolPopularity.map((t) => `${t.id}(${t.calls})`).join(', ')}`,
+            '운영자가 "막힌 사람", "전체 진행", "다른 사람들" 등 물어보면 위 데이터 활용해 답변.',
+          ].join('\n');
+        } catch {}
       }
     }
 
@@ -153,6 +187,8 @@ export function createChatApi() {
       '셀 6·7·9는 채팅창에 답을 적으면 자동 저장돼요. 셀 8은 cron 트리거(`trigger.cron("0 9 * * *")`) 등록 + 한 번 발화하면 클리어.',
       bingoSummary || '(아직 학습자 미확인 — 빙고 상태 없음)',
       '',
+      codeContext || '',
+      operatorContext || '',
       '[텔레그램 봇 등록 상태]',
       telegramRegistered
         ? `✅ 등록됨 (셀 2 클리어 준비 OK)`
@@ -171,7 +207,7 @@ export function createChatApi() {
       '     Generate 누르면 토큰 나와요. 그거 복사해서 알려주시면 본인 전용 브랜치까지 다 만들어드려요."',
       '  ③ "귀찮으면 안 만들어도 돼요! 그땐 본인 컴퓨터에서 명령어 두 줄로 브랜치 만드는 법 차근차근 알려드릴게요."',
       'PAT 받는 게 학습자에게 부담스러워 보이면 절대 강요하지 말고, 본인 브랜치를 명령어로 만드는 방법으로 자연스럽게 전환.',
-      'PAT를 알려주면 운영자(준)에게 전달돼야 함 → 학습자한테 "토큰 알려주시면 운영자한테 전달해서 등록할게요" 안내.',
+      '학습자가 PAT 토큰(github_pat_... 또는 ghp_...)을 채팅에 적으면 자동으로 운영자 큐에 들어가니, 그대로 채팅에 적어달라고 안내. 받은 후엔 "감사합니다! 운영자에게 전달했어요. 잠시 후 본인 브랜치가 자동 생성될 거예요" 답변.',
       '',
       '[다른 학습자 현황 — "다른 사람들 뭐해요?", "전체 상황", "monitor" 등 키워드 받으면]',
       '대시보드가 자동으로 monitor 카드를 첨부해요 — 16명 모두의 빙고 진행률·최근 활동을 표 형태로 표시.',

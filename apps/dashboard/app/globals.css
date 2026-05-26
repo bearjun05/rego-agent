@@ -100,6 +100,86 @@ html, body {
 }
 .fade-up { animation: fadeUp 200ms ease both; }
 
+/* ─────────────────────────────────────
+ * Lego 테마 — 살짝 빠지는 정도 (브루털리스트 베이스 유지)
+ * ───────────────────────────────────── */
+
+/* Brick stud — 카드 우상단 작은 점 */
+.stud {
+  position: relative;
+}
+.stud::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.18;
+}
+.stud-done::after {
+  background: #C5532E;
+  opacity: 1;
+}
+
+/* Lego primaries (mute톤) — 4축 컬러 토큰 */
+:root {
+  --lego-blue: #4A8DD1;   /* 트리거 */
+  --lego-yellow: #F4D300; /* 도구 */
+  --lego-purple: #9B6AC8; /* 규칙 */
+  --lego-green: #6AC89B;  /* 상태 */
+}
+
+/* Snap 애니메이션 — 셀 클리어 시 살짝 살아남 */
+@keyframes snapIn {
+  0%   { transform: translateY(-8px) rotate(-2deg); opacity: 0; }
+  60%  { transform: translateY(2px) rotate(1deg); opacity: 1; }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+.snap-in { animation: snapIn 280ms cubic-bezier(.34,1.56,.64,1) both; }
+
+/* Brick row — 헤더의 piece counter (9개 stud 가로 배치) */
+.brick-row {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.brick-stud {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.15);
+  transition: background 200ms ease;
+}
+.brick-stud-on { background: #0A0A0A; }
+
+/* Brick shadow — 살짝 입체감 (브루털 기존 그림자 위에 살짝) */
+.brick {
+  position: relative;
+  border-top: 2px solid rgba(255,255,255,0.4);
+  border-left: 2px solid rgba(255,255,255,0.2);
+}
+.brick::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.1);
+  pointer-events: none;
+}
+
+/* 모달 backdrop fade */
+@keyframes backdropFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.backdrop-fade { animation: backdropFade 200ms ease both; }
+
 /* 타이핑 인디케이터 (사람처럼 "…" 작성 중) */
 @keyframes typingBounce {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
