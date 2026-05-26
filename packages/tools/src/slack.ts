@@ -1,4 +1,35 @@
-import { defineTool, z } from '@rego/runtime-sdk';
+import { defineTool, z, type ToolContext } from '@rego/runtime-sdk';
+
+// ─────────────────────────────────────────────────────────
+// 토큰 선택 — Phase 1 (per-user 토큰 주입)
+//
+// 우선순위:
+//   1) ctx.agentSlackToken — 학습자가 OAuth로 연결한 본인 토큰
+//   2) ctx.secret('SLACK_BOT_TOKEN') — 전역 봇 토큰 (새 rego 앱은 없음, 옛 호환용)
+//   3) 둘 다 없으면 SLACK_NOT_CONNECTED throw → 친절한 안내 가능
+// ─────────────────────────────────────────────────────────
+export function pickSlackToken(
+  agentToken: string | undefined,
+  globalToken: string | undefined,
+): string {
+  if (agentToken) return agentToken;
+  if (globalToken) return globalToken;
+  throw new Error('SLACK_NOT_CONNECTED');
+}
+
+/** ctx.secret이 throw할 수 있는 케이스 대비. 전역 토큰이 없으면 undefined 반환. */
+function tryGlobalBotToken(ctx: ToolContext): string | undefined {
+  try {
+    return ctx.secret('SLACK_BOT_TOKEN');
+  } catch {
+    return undefined;
+  }
+}
+
+/** ctx에서 적절한 슬랙 토큰을 선택 — 학습자 본인 OAuth 토큰 우선. */
+function tokenFromCtx(ctx: ToolContext): string {
+  return pickSlackToken(ctx.agentSlackToken, tryGlobalBotToken(ctx));
+}
 
 // ─────────────────────────────────────────────────────────
 // Slack 서명 검증 (외부 사용 가능)
@@ -44,10 +75,13 @@ function safeCompare(a: string, b: string) {
 // Slack API 클라이언트 (간단한 wrapper)
 // ─────────────────────────────────────────────────────────
 export class SlackClient {
-  constructor(private token: string) {}
+  constructor(
+    private token: string,
+    private fetchImpl: typeof fetch = fetch,
+  ) {}
 
   async call<T = unknown>(method: string, body: Record<string, unknown>): Promise<T> {
-    const res = await fetch(`https://slack.com/api/${method}`, {
+    const res = await this.fetchImpl(`https://slack.com/api/${method}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.token}`,
@@ -143,7 +177,7 @@ export const slackReply = defineTool({
   sideEffects: { reads: [], writes: ['slack'] },
   secrets: ['SLACK_BOT_TOKEN'],
   async run({ channel, threadTs, text }, ctx) {
-    const slack = new SlackClient(ctx.secret('SLACK_BOT_TOKEN'));
+    const slack = new SlackClient(tokenFromCtx(ctx));
     const r = await slack.postMessage({ channel, text, thread_ts: threadTs });
     ctx.logger.info('slack.reply 완료', { channel, threadTs, ts: r.ts });
     return { ok: true, ts: r.ts };
@@ -168,7 +202,7 @@ export const slackPostMessage = defineTool({
   costTier: 'free',
   secrets: ['SLACK_BOT_TOKEN'],
   async run({ channel, text }, ctx) {
-    const slack = new SlackClient(ctx.secret('SLACK_BOT_TOKEN'));
+    const slack = new SlackClient(tokenFromCtx(ctx));
     const r = await slack.postMessage({ channel, text });
     return { ok: true, ts: r.ts };
   },
@@ -190,7 +224,7 @@ export const slackAddReaction = defineTool({
   costTier: 'free',
   secrets: ['SLACK_BOT_TOKEN'],
   async run({ channel, timestamp, emoji }, ctx) {
-    const slack = new SlackClient(ctx.secret('SLACK_BOT_TOKEN'));
+    const slack = new SlackClient(tokenFromCtx(ctx));
     await slack.addReaction({ channel, timestamp, name: emoji.replace(/:/g, '') });
     return { ok: true };
   },
@@ -210,7 +244,7 @@ export const slackSearch = defineTool({
   costTier: 'low',
   secrets: ['SLACK_BOT_TOKEN'],
   async run({ query, limit }, ctx) {
-    const slack = new SlackClient(ctx.secret('SLACK_BOT_TOKEN'));
+    const slack = new SlackClient(tokenFromCtx(ctx));
     const r = await slack.search({ query, count: limit });
     return { results: r.messages?.matches ?? [] };
   },
@@ -230,7 +264,7 @@ export const slackGetThread = defineTool({
   costTier: 'free',
   secrets: ['SLACK_BOT_TOKEN'],
   async run({ channel, ts }, ctx) {
-    const slack = new SlackClient(ctx.secret('SLACK_BOT_TOKEN'));
+    const slack = new SlackClient(tokenFromCtx(ctx));
     const r = await slack.conversationsReplies({ channel, ts });
     return { messages: r.messages };
   },

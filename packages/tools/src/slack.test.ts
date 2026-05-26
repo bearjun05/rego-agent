@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { verifySlackSignature } from './slack.js';
+import { verifySlackSignature, pickSlackToken } from './slack.js';
 import { allSlackTools } from './slack.js';
 
 describe('verifySlackSignature', () => {
@@ -60,5 +60,27 @@ describe('slack 도구 메타데이터', () => {
       expect(t.outputs).toBeDefined();
       expect(t.category).toBeDefined();
     }
+  });
+});
+
+describe('pickSlackToken (Phase 1: 토큰 선택)', () => {
+  it('agent 토큰 있으면 그것 우선 사용', () => {
+    expect(pickSlackToken('xoxp-agent', 'xoxb-global')).toBe('xoxp-agent');
+  });
+
+  it('agent 토큰 없고 global 있으면 global', () => {
+    expect(pickSlackToken(undefined, 'xoxb-global')).toBe('xoxb-global');
+  });
+
+  it('agent 토큰 빈 문자열이면 global로 폴백', () => {
+    expect(pickSlackToken('', 'xoxb-global')).toBe('xoxb-global');
+  });
+
+  it('둘 다 없으면 SLACK_NOT_CONNECTED throw', () => {
+    expect(() => pickSlackToken(undefined, undefined)).toThrow('SLACK_NOT_CONNECTED');
+  });
+
+  it('둘 다 빈 문자열이면 throw', () => {
+    expect(() => pickSlackToken('', '')).toThrow('SLACK_NOT_CONNECTED');
   });
 });

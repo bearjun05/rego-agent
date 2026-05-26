@@ -174,6 +174,10 @@ export interface AgentContext {
 export interface ToolContext extends Pick<AgentContext, 'agentName' | 'runId' | 'logger'> {
   /** env에서 시크릿 가져오기 (런타임이 권한 체크) */
   secret: (key: string) => string;
+  /** 텔레그램 chat_id (telegram.send 자동 주입용). 미설정 시 도구가 throw. */
+  agentChatId?: string;
+  /** 소유자 슬랙 OAuth 토큰 (slack.* 도구 자동 사용). 미설정 시 SLACK_NOT_CONNECTED throw. */
+  agentSlackToken?: string;
 }
 
 // ─────────────────────────────────────────────────────────

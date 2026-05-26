@@ -25,6 +25,7 @@ import { getEventBus } from './event-bus.js';
 import { audit } from './audit.js';
 import { incrementCalls } from './rate-limit.js';
 import { getAgent, listAgents, type LoadedAgent } from './agent-registry.js';
+import { getValidAccessToken } from './slack-tokens.js';
 
 // ─────────────────────────────────────────────────────────
 // Tool registry (공통 + per-agent custom)
@@ -132,6 +133,7 @@ async function createContext(
   agent: LoadedAgent,
   runId: string,
   chatId: string | null | undefined,
+  slackToken: string | null | undefined,
 ): Promise<AgentContext> {
   const cfg = env();
   const logger = createLogger(`agent:${agent.name}`);
@@ -203,7 +205,7 @@ async function createContext(
   for (const [id, tool] of tools) {
     if (!accessibleTools.has(id)) continue;
 
-    const toolCtx: ToolContext & { agentChatId?: string } = {
+    const toolCtx: ToolContext = {
       agentName: agent.name,
       runId,
       logger,
@@ -217,6 +219,7 @@ async function createContext(
         return value;
       },
       agentChatId: chatId ?? undefined,
+      agentSlackToken: slackToken ?? undefined,
     };
 
     toolsProxy[id] = async (input: unknown) => {
@@ -441,7 +444,15 @@ export async function runAgentForEvent(
   }
 
   // ctx 생성 (pause 체크에서 가져온 row의 chat_id 재사용 — 중복 조회 방지)
-  const ctx = await createContext(agent, runId, row?.telegramChatId);
+  // 슬랙 OAuth 토큰: 학습자가 본인 Slack 연결했으면 도구 자격증명으로 주입.
+  // (Phase 1: 캐시 + mutex로 race·중복호출 안전)
+  const slackToken = row?.slackUserId
+    ? await getValidAccessToken(row.slackUserId).catch((err) => {
+        log.warn(`slack token fetch failed for ${row.slackUserId}`, err);
+        return null;
+      })
+    : null;
+  const ctx = await createContext(agent, runId, row?.telegramChatId, slackToken);
 
   // timeout 처리
   let timedOut = false;

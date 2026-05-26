@@ -1,10 +1,28 @@
 import { Hono } from 'hono';
 import { randomBytes } from 'node:crypto';
+import { eq } from 'drizzle-orm';
+import { getDb, agents } from '@rego/db';
 import { env } from '../env.js';
 import { createLogger } from '../logger.js';
 import { signState, verifyState } from '../crypto.js';
 import { buildSlackAuthorizeUrl, exchangeCode } from '../slack-oauth.js';
 import { saveUserToken } from '../slack-tokens.js';
+
+/**
+ * D5 본인 확인 — 콜백에서 받은 slack user id가 그 agent 슬롯의 등록된 user id와 일치하는지.
+ * 일치하지 않으면 다른 사람 자리에 본인 슬랙 연결을 시도한 것 → 거부.
+ *
+ * 순수 함수 (테스트 가능).
+ *
+ * @returns true면 거부해야 함 (불일치 또는 roster 미등록)
+ */
+export function isOwnerMismatch(
+  authedId: string,
+  rosterId: string | null | undefined,
+): boolean {
+  if (!rosterId) return true; // roster에 없는 자리 → 거부
+  return authedId !== rosterId;
+}
 
 const log = createLogger('oauth');
 
@@ -72,6 +90,22 @@ export function createOAuthApi() {
         log.error(`oauth exchange failed: ${resp.error ?? 'no user token'}`);
         return c.html(page('실패', `토큰 교환 실패: ${escapeHtml(resp.error ?? 'unknown')}`), 400);
       }
+
+      // D5: 본인 확인 — roster에 등록된 slack_user_id와 일치해야 함
+      const db = getDb();
+      const [rosterRow] = await db
+        .select({ slackUserId: agents.slackUserId })
+        .from(agents)
+        .where(eq(agents.name, agent));
+      const rosterId = rosterRow?.slackUserId;
+      if (isOwnerMismatch(u.id, rosterId)) {
+        log.warn(`owner mismatch: agent=${agent} authed=${u.id} roster=${rosterId ?? 'NONE'}`);
+        const msg = !rosterId
+          ? `등록되지 않은 자리예요: <code>${escapeHtml(agent)}</code>`
+          : `본인 Slack 계정으로 연결해주세요. 이 자리(<code>${escapeHtml(agent)}</code>)는 다른 사용자로 등록돼 있어요.`;
+        return c.html(page('연결 거부', msg), 403);
+      }
+
       await saveUserToken({
         agentName: agent,
         slackUserId: u.id,
