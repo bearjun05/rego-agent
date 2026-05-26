@@ -7,6 +7,7 @@ import { MonitorCard } from './MonitorCard';
 import { RevealModal } from './RevealModal';
 import { ThemePicker, detectThemeIntent } from './ThemePicker';
 import { weekLabel, weekLabelEn } from '@/lib/week';
+import { Markdown } from './Markdown';
 
 type CardData =
   | { type: 'oauth'; agentSlug: string; done?: boolean }
@@ -586,14 +587,14 @@ export function HomeChat() {
                   </span>
                 )}
                 <div
-                  className={`max-w-[80%] px-4 py-3 text-sm whitespace-pre-wrap leading-relaxed ${
+                  className={`max-w-[80%] px-4 py-3 text-sm leading-relaxed space-y-2 ${
                     m.role === 'user'
-                      ? 'bg-ink text-paper'
+                      ? 'bg-ink text-paper whitespace-pre-wrap'
                       : 'bg-sand border-2 border-line'
                   }`}
                   style={{ borderRadius: 'var(--th-card-radius, 0)' }}
                 >
-                  {m.content}
+                  {m.role === 'assistant' ? <Markdown text={m.content} /> : m.content}
                 </div>
               </div>
             )}
@@ -614,9 +615,11 @@ export function HomeChat() {
                     <div className="font-display font-bold text-sm mb-1">
                       🎯 {m.card.cell.id}. {m.card.cell.title}
                     </div>
-                    <div className="text-xs leading-relaxed mb-2">{m.card.cell.description}</div>
-                    <div className="font-mono text-[10px] text-muted bg-sand border-2 border-ink p-2 mb-2">
-                      💡 {m.card.cell.hint}
+                    <div className="text-xs leading-relaxed mb-2">
+                      <Markdown text={m.card.cell.description} />
+                    </div>
+                    <div className="font-mono text-[10px] text-muted bg-sand border-2 border-line p-2 mb-2">
+                      💡 <Markdown text={m.card.cell.hint} />
                     </div>
                     {m.card.cell.method === 'chat_input' ? (
                       <div className="font-mono text-[10px] text-muted">
