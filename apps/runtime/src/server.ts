@@ -18,6 +18,7 @@ import { env } from './env.js';
 import { createLogger } from './logger.js';
 import { loadAllAgents, listAgents } from './agent-registry.js';
 import { refreshSlackUserMap } from './agent-runner.js';
+import { bindAllCronTriggers } from './agent-cron-bind.js';
 import { syncManifestToolsForAgent, ensureAgentRow } from './manifest-sync.js';
 import { analyzeAllStale } from './analyzer.js';
 import { startSlackPoller } from './slack-poller.js';
@@ -103,6 +104,9 @@ async function main() {
 
   // 슬랙 멘션 라우팅용 slack_user_id 매핑 로드
   await refreshSlackUserMap();
+
+  // T4: 에이전트의 cron 트리거를 in-app 스케줄러에 등록
+  bindAllCronTriggers(listAgents());
 
   // Tier2 폴러 (옵트인 유저의 비공개 채널 멘션 폴링) — env로 게이트
   if (process.env.SLACK_POLL_ENABLED === '1') {
