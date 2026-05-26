@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
-import { getDb, kvState } from '@rego/db';
+import { eq, desc, sql } from 'drizzle-orm';
+import { getDb, kvState, agents, runs, telegramMessages } from '@rego/db';
 import { CELL_DEFS, CELL_IDS, CHAT_INPUT_CELLS, type CellId } from '../bingo-rules.js';
 import { checkAllCells, checkCell } from '../bingo-checks.js';
 import { createLogger } from '../logger.js';
@@ -66,6 +66,64 @@ export function createBingoApi() {
       });
     log.info(`bingo claim: ${agent} cell ${cell}`);
     return c.json({ passed: true, reason: '저장됨' });
+  });
+
+  /**
+   * 전체 학습자 모니터링 (운영자 뷰 + 채팅 monitor 카드).
+   * 16명 빙고 진행률 + 마지막 활동 + 막힘 여부.
+   */
+  r.get('/all', async (c) => {
+    const db = getDb();
+    const all = await db
+      .select({
+        name: agents.name,
+        displayName: agents.displayName,
+        slackUserId: agents.slackUserId,
+        telegramChatId: agents.telegramChatId,
+        isPaused: agents.isPaused,
+      })
+      .from(agents);
+
+    // 각 agent의 마지막 run 시각 (활동 indicator)
+    const lastRuns = await db
+      .select({
+        agentName: runs.agentName,
+        lastAt: sql<string>`max(${runs.startedAt})::text`,
+      })
+      .from(runs)
+      .groupBy(runs.agentName);
+    const lastMap = new Map(lastRuns.map((r) => [r.agentName, r.lastAt]));
+
+    const rows = await Promise.all(
+      all.map(async (a) => {
+        const cells = await checkAllCells(a.name);
+        const doneCount = Object.values(cells).filter((s) => s === 'done').length;
+        const lastAt = lastMap.get(a.name) ?? null;
+        const minsAgo = lastAt
+          ? Math.floor((Date.now() - new Date(lastAt).getTime()) / 60_000)
+          : null;
+        return {
+          name: a.name,
+          displayName: a.displayName,
+          slackConnected: !!a.slackUserId, // roster 등록 = 슬랙 ID 있음
+          telegramConnected: !!a.telegramChatId,
+          isPaused: a.isPaused,
+          bingoDone: doneCount,
+          bingoCells: cells,
+          lastActivityAt: lastAt,
+          lastActivityMinsAgo: minsAgo,
+          stuck: minsAgo !== null && minsAgo > 5 && doneCount < 9,
+        };
+      }),
+    );
+
+    return c.json({
+      total: rows.length,
+      done: rows.filter((r) => r.bingoDone === 9).length,
+      active: rows.filter((r) => r.lastActivityMinsAgo !== null && r.lastActivityMinsAgo < 5).length,
+      stuck: rows.filter((r) => r.stuck).length,
+      rows: rows.sort((a, b) => b.bingoDone - a.bingoDone),
+    });
   });
 
   return r;

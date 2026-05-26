@@ -20,6 +20,7 @@ import { bindCronTriggers } from '../agent-cron-bind.js';
 import { refreshSlackUserMap } from '../agent-runner.js';
 import { syncManifestToolsForAgent, ensureAgentRow } from '../manifest-sync.js';
 import { getCronScheduler } from '../cron-scheduler.js';
+import { getEventBus } from '../event-bus.js';
 import { createLogger } from '../logger.js';
 
 const reloadLog = createLogger('api:reload');
@@ -310,5 +311,13 @@ async function doHotReload(name: string): Promise<
   }
 
   reloadLog.info(`reload OK: ${name} @ ${sha.slice(0, 8)} (${cronCount} cron)`);
+  // SSE 이벤트 — 인솔이가 "코드 적용됐어요" 능동 반응 가능
+  await getEventBus()
+    .publish({
+      type: 'agent.reloaded',
+      agentName: name,
+      payload: { sha, branch, cronCount },
+    })
+    .catch(() => {});
   return { ok: true, sha, branch, cronCount };
 }

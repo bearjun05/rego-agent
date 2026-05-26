@@ -3,12 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import { BingoBoard, type CellDef, type CellStatus } from './BingoBoard';
 import { OAuthCard } from './OAuthCard';
 import { ReloadButton } from './ReloadButton';
+import { MonitorCard } from './MonitorCard';
 
 type CardData =
   | { type: 'oauth'; agentSlug: string; done?: boolean }
   | { type: 'bingo'; agentSlug: string }
   | { type: 'mission'; cell: CellDef }
-  | { type: 'reload'; agentSlug: string };
+  | { type: 'reload'; agentSlug: string }
+  | { type: 'monitor' };
 
 interface Message {
   role: 'user' | 'assistant';
@@ -86,6 +88,13 @@ export function HomeChat() {
   /** 현재 학습자가 채팅 입력으로 풀어야 할 셀 (활성 시 입력 = claim) */
   const [activeMissionCell, setActiveMissionCell] = useState<CellDef | null>(null);
 
+  /** 마지막 인터랙션 (사용자 입력 / 시스템 자동 메시지) 타임스탬프 — 막힘 감지용 */
+  const lastActivityRef = useRef<number>(Date.now());
+  /** 직전 빙고 상태 캐시 — 변화 감지로 축하 메시지 띄움 */
+  const prevCellsRef = useRef<Record<number, 'done' | 'pending'> | null>(null);
+  /** 첫 진입에서 monitor 카드 표시 여부 */
+  const monitorShownRef = useRef(false);
+
   const rosterRef = useRef<Person[]>([]);
   const sessionRef = useRef<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -162,6 +171,122 @@ export function HomeChat() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 인솔이가 능동으로 메시지 추가하는 헬퍼 (활동 시각 갱신)
+  const insolMessage = (content: string, card?: CardData) => {
+    setMessages((m) => [...m, { role: 'assistant', content, card }]);
+    lastActivityRef.current = Date.now();
+  };
+
+  // SSE 구독 — 본인 agentName 이벤트 받으면 인솔이가 능동 반응
+  useEffect(() => {
+    if (!slug) return;
+    const es = new EventSource('/api/runtime-events');
+    const handler = (ev: MessageEvent) => {
+      try {
+        const data = JSON.parse(ev.data) as { type: string; agentName?: string; payload?: unknown };
+        if (data.agentName && data.agentName !== slug) return;
+        let msg: string | null = null;
+        if (data.type === 'slack.mention.received') {
+          msg = '🔔 슬랙 멘션 들어왔어요! 1분 안에 텔레그램 도착하는지 봐요.';
+        } else if (data.type === 'agent.reloaded') {
+          const sha = (data.payload as { sha?: string } | undefined)?.sha?.slice(0, 8);
+          msg = `⚡ 코드 적용 완료${sha ? ` (${sha})` : ''}! 슬랙에서 멘션 한 번 보내볼까요?`;
+        } else if (data.type === 'tool.called') {
+          const payload = data.payload as { toolId?: string } | undefined;
+          if (payload?.toolId === 'slack.reactions_add') {
+            msg = '👀 이모지 자동 반응 호출됐어요! 셀 3 통과 ✓';
+          } else if (payload?.toolId === 'telegram.edit_message') {
+            msg = '✏️ 텔레그램 메시지 수정 호출 — 버튼 동작 잘 되고 있어요!';
+          }
+        } else if (data.type === 'run.finished') {
+          const trigger = (data.payload as { triggerType?: string } | undefined)?.triggerType;
+          if (trigger === 'telegram.callback') {
+            msg = '🎯 텔레그램 버튼 콜백 처리됨! 셀 4 통과 ✓';
+          } else if (trigger === 'cron') {
+            msg = '⏰ cron 트리거 발화 성공! 셀 8 통과 ✓';
+          }
+        }
+        if (msg) {
+          insolMessage(msg);
+          setBingoRefreshKey((k) => k + 1); // 빙고판 즉시 재조회
+        }
+      } catch {}
+    };
+    for (const t of [
+      'slack.mention.received',
+      'agent.reloaded',
+      'tool.called',
+      'run.finished',
+    ]) {
+      es.addEventListener(t, handler);
+    }
+    return () => {
+      for (const t of [
+        'slack.mention.received',
+        'agent.reloaded',
+        'tool.called',
+        'run.finished',
+      ]) {
+        es.removeEventListener(t, handler);
+      }
+      es.close();
+    };
+  }, [slug]);
+
+  // 빙고 상태 변화 감지 — 새로 done된 셀 있으면 축하 + 다음 셀 추천
+  const checkBingoProgress = async () => {
+    if (!slug) return;
+    try {
+      const r = await fetch(`/api/runtime/bingo/status?agent=${encodeURIComponent(slug)}`);
+      const data = (await r.json()) as { cells: Record<string, 'done' | 'pending'> };
+      const current: Record<number, 'done' | 'pending'> = {};
+      for (const [k, v] of Object.entries(data.cells)) current[Number(k)] = v;
+      const prev = prevCellsRef.current;
+      if (prev) {
+        const newlyDone = Object.entries(current)
+          .filter(([id, s]) => s === 'done' && prev[Number(id)] !== 'done')
+          .map(([id]) => Number(id));
+        for (const id of newlyDone) {
+          insolMessage(`🎉 셀 ${id} 클리어!`);
+        }
+        // 다음 셀 추천
+        if (newlyDone.length > 0) {
+          const nextPending = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((n) => current[n] !== 'done');
+          if (nextPending) {
+            const doneCount = Object.values(current).filter((s) => s === 'done').length;
+            if (doneCount === 9) {
+              insolMessage('🏁 빙고 9개 완주! 진짜 수고하셨어요. 잠시 쉬다 와요 ☕');
+            } else {
+              insolMessage(
+                `이제 ${doneCount}/9 — 다음은 셀 ${nextPending}을 풀어볼까요? 빙고판에서 클릭하면 안내해드릴게요.`,
+              );
+            }
+          }
+        }
+      }
+      prevCellsRef.current = current;
+    } catch {}
+  };
+
+  useEffect(() => {
+    checkBingoProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bingoRefreshKey, slug]);
+
+  // 막힘 감지 — N분 진전 없으면 인솔이가 먼저 도움 제안
+  useEffect(() => {
+    if (!slug || stage !== 'chatting') return;
+    const STUCK_AFTER_MS = 3 * 60 * 1000;
+    const interval = setInterval(() => {
+      const since = Date.now() - lastActivityRef.current;
+      if (since > STUCK_AFTER_MS && !busy && !typing) {
+        insolMessage('혹시 어디서 막혔어요? 셀 클릭해서 안내문 다시 보거나, 어떤 부분이 헷갈리는지 적어주시면 도와드릴게요. 🐱');
+        lastActivityRef.current = Date.now(); // 한 번 보내면 리셋
+      }
+    }, 60 * 1000); // 1분 단위 체크
+    return () => clearInterval(interval);
+  }, [slug, stage, busy, typing]);
 
   // 셀 클릭 → 미션 카드를 메시지로 띄움. 자동 검증 셀이면 즉시 verify 시도.
   const handleBingoCellClick = (cell: CellDef, status: CellStatus) => {
@@ -313,6 +438,8 @@ export function HomeChat() {
       return;
     }
 
+    lastActivityRef.current = Date.now(); // 사용자 입력 = 활동
+
     // 활성 미션이 있고 채팅 입력 셀이면 claim
     if (activeMissionCell && activeMissionCell.method === 'chat_input') {
       setMessages((m) => [...m, { role: 'user', content }]);
@@ -320,8 +447,12 @@ export function HomeChat() {
       return;
     }
 
-    // 2) 자유 대화
+    // 2) 자유 대화 — "다른 사람", "전체", "monitor" 등 키워드면 monitor 카드 자동 첨부
     setMessages((m) => [...m, { role: 'user', content }]);
+    const wantsMonitor = /다른\s*사람|전체|모두|monitor|모니터|진행률|누가\s*뭐/.test(content);
+    if (wantsMonitor) {
+      setMessages((m) => [...m, { role: 'assistant', content: '', card: { type: 'monitor' } }]);
+    }
     await askCoach(content, sessionRef.current, slug, given);
   };
 
@@ -404,6 +535,7 @@ export function HomeChat() {
                     }}
                   />
                 )}
+                {m.card.type === 'monitor' && <MonitorCard compact />}
               </div>
             )}
           </div>

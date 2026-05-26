@@ -55,31 +55,35 @@ export default function HomePage() {
         <HomeChat />
       </section>
 
-      {/* 1주차 구분선 + 대시보드 바로가기 */}
-      <section className="mb-16">
-        <div className="flex items-center gap-4 mb-5">
-          <span className="font-display font-extrabold text-2xl lg:text-3xl whitespace-nowrap">
-            1주차
-          </span>
-          <div className="flex-1 border-t-2 border-ink" />
-          <span className="font-mono text-[10px] uppercase tracking-widest text-muted whitespace-nowrap">
-            SLACK MENTION → TELEGRAM
-          </span>
-        </div>
-
+      {/* 주차별 대시보드 */}
+      <section className="mb-16 grid md:grid-cols-2 gap-4">
         <Link
           href="/week1"
-          className="brut p-6 flex items-center justify-between gap-4 group hover:bg-sand transition-colors"
+          className="brut p-6 flex flex-col gap-2 group hover:bg-sand transition-colors"
         >
-          <div>
-            <div className="font-display font-bold text-xl lg:text-2xl mb-1">
-              1주차 대시보드 바로가기
-            </div>
-            <div className="text-sm text-muted">
-              참여자별 에이전트 카드, 멘션 흐름, 실시간 비용·활동을 한눈에.
-            </div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted">
+            WEEK 1 · ONBOARDING
           </div>
-          <span className="font-display font-extrabold text-3xl lg:text-4xl text-rust group-hover:translate-x-1 transition-transform">
+          <div className="font-display font-bold text-xl">1주차 대시보드</div>
+          <div className="text-sm text-muted">
+            참여자별 에이전트 카드, 멘션 흐름, 실시간 비용·활동.
+          </div>
+          <span className="font-display font-extrabold text-2xl text-rust mt-auto self-end group-hover:translate-x-1 transition-transform">
+            →
+          </span>
+        </Link>
+        <Link
+          href="/week2"
+          className="brut p-6 flex flex-col gap-2 group hover:bg-sand transition-colors"
+        >
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted">
+            WEEK 2 · 실시간 모니터링
+          </div>
+          <div className="font-display font-bold text-xl">실시간 16명 진행률</div>
+          <div className="text-sm text-muted">
+            누가 어디까지 풀었나, 누가 막혀있나. 15초마다 갱신.
+          </div>
+          <span className="font-display font-extrabold text-2xl text-rust mt-auto self-end group-hover:translate-x-1 transition-transform">
             →
           </span>
         </Link>

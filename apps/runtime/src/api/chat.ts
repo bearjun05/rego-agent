@@ -76,14 +76,16 @@ export function createChatApi() {
       .limit(24);
     history.reverse();
 
-    // 매칭된 사용자라면 풀네임 조회 (페르소나 개인화)
+    // 매칭된 사용자라면 풀네임 + 텔레그램 등록 여부 조회
     let displayName: string | null = null;
+    let telegramRegistered = false;
     if (agentName) {
       const [row] = await db
-        .select({ d: agents.displayName })
+        .select({ d: agents.displayName, chatId: agents.telegramChatId })
         .from(agents)
         .where(eq(agents.name, agentName));
       displayName = row?.d ?? null;
+      telegramRegistered = !!row?.chatId;
     }
     const callName = userName ?? displayName ?? null;
     const isFirstTurn = history.filter((h) => h.role === 'assistant').length === 0;
@@ -150,6 +152,30 @@ export function createChatApi() {
       '셀 3·4·5는 본인 폴더(agents/' + (agentName ?? '<slug>') + '/handler.ts) 코드를 수정해야 풀려요. 코드 수정 후 [내 코드 적용하기] 버튼을 누르라고 안내.',
       '셀 6·7·9는 채팅창에 답을 적으면 자동 저장돼요. 셀 8은 cron 트리거(`trigger.cron("0 9 * * *")`) 등록 + 한 번 발화하면 클리어.',
       bingoSummary || '(아직 학습자 미확인 — 빙고 상태 없음)',
+      '',
+      '[텔레그램 봇 등록 상태]',
+      telegramRegistered
+        ? `✅ 등록됨 (셀 2 클리어 준비 OK)`
+        : agentName
+          ? `❌ 미등록 — 빙고 시작 전 반드시 안내:
+   "텔레그램 앱 열어서 @rego_agent_bot 검색 → 채팅 시작 → 메시지 입력: /start ${agentName}"
+   이 단계 끝나야 셀 2 (멘션→텔레그램 도착)가 작동해요. 첫 인사 직후 자연스럽게 안내.`
+          : '학습자 미확인',
+      '',
+      '[GitHub 브랜치 자동 관리 안내 — PAT 받기]',
+      '학습자에게 GitHub Personal Access Token을 받아두면 본인 전용 브랜치를 rego가 자동으로 만들어주고 관리해줍니다.',
+      '학습자가 코드 작업하려고 할 때, 이렇게 자연스럽게 안내해줘:',
+      '  ① "GitHub Personal Access Token(=권한 통행증) 하나 만들어서 알려주실래요?"',
+      '  ② "https://github.com/settings/personal-access-tokens/new 들어가서 →',
+      '     Repository access는 rego-agent만 선택 → Contents: Read and write 권한 →',
+      '     Generate 누르면 토큰 나와요. 그거 복사해서 알려주시면 본인 전용 브랜치까지 다 만들어드려요."',
+      '  ③ "귀찮으면 안 만들어도 돼요! 그땐 본인 컴퓨터에서 명령어 두 줄로 브랜치 만드는 법 차근차근 알려드릴게요."',
+      'PAT 받는 게 학습자에게 부담스러워 보이면 절대 강요하지 말고, 본인 브랜치를 명령어로 만드는 방법으로 자연스럽게 전환.',
+      'PAT를 알려주면 운영자(준)에게 전달돼야 함 → 학습자한테 "토큰 알려주시면 운영자한테 전달해서 등록할게요" 안내.',
+      '',
+      '[다른 학습자 현황 — "다른 사람들 뭐해요?", "전체 상황", "monitor" 등 키워드 받으면]',
+      '대시보드가 자동으로 monitor 카드를 첨부해요 — 16명 모두의 빙고 진행률·최근 활동을 표 형태로 표시.',
+      '인솔이는 그 카드를 보고 "○○님이 6/9까지 풀었고, △△님이 셀 4에서 막힌 듯해요" 같이 짧게 코멘트만 덧붙여줘.',
       '',
       '[온보딩 가이드]',
       getOnboardingGuide(),
