@@ -3,8 +3,27 @@
 // 순수 함수(URL/만료판정)와 네트워크 함수(fetch 주입 가능)를 분리해 테스트 가능하게.
 // ─────────────────────────────────────────────────────────
 
-/** rego가 유저 토큰으로 비공개 채널까지 폴링하기 위한 user scope */
-export const USER_SCOPES = ['search:read', 'channels:history', 'groups:history', 'users:read'];
+/** rego 전용 Slack 앱 매니페스트의 user scopes 18종 (v2 앱 매니페스트와 동기). */
+export const USER_SCOPES = [
+  'channels:history',
+  'channels:read',
+  'groups:history',
+  'groups:read',
+  'users:read',
+  'users:read.email',
+  'users.profile:read',
+  'team:read',
+  'chat:write',
+  'reactions:write',
+  'reactions:read',
+  'emoji:read',
+  'files:read',
+  'links:read',
+  'pins:read',
+  'bookmarks:read',
+  'search:read',
+  'usergroups:read',
+];
 
 /** authorize URL 생성 (순수) */
 export function buildSlackAuthorizeUrl(o: {
