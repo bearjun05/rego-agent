@@ -1,28 +1,81 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Space+Grotesk:wght@400;600;700&family=DM+Serif+Display&family=Press+Start+2P&family=Caveat:wght@600;700&family=Bricolage+Grotesque:wght@500;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ───────────────────────────────────────
+ *  테마 토큰 (기본 = 브루털리스트 원본)
+ * ─────────────────────────────────────── */
 :root {
   color-scheme: light;
+
+  --th-bg: #F2EFE6;
+  --th-bg-alt: #D9CFB7;
+  --th-bg-elevated: #FAF8F3;
+  --th-fg: #0A0A0A;
+  --th-fg-strong: #1A1A1A;
+  --th-muted: #7A736B;
+  --th-border: #1F1F1F;
+  --th-accent: #C5532E;
+  --th-accent2: #3E5C3E;
+
+  --th-card-shadow: 4px 4px 0 0 #0A0A0A;
+  --th-card-shadow-sm: 2px 2px 0 0 #0A0A0A;
+  --th-card-radius: 0px;
+  --th-card-border-w: 2px;
+  --th-card-bg: #F2EFE6;
+  --th-card-hover-transform: translate(-1px, -1px);
+  --th-card-hover-shadow: 5px 5px 0 0 #0A0A0A;
+
+  --th-stud-color: #0A0A0A;
+  --th-stud-size: 8px;
+  --th-stud-radius: 50%;
+
+  /* 4축 컬러 — 청사진/리빌 시각화에 쓰임 */
+  --th-primary-1: #4A8DD1;
+  --th-primary-2: #F4D300;
+  --th-primary-3: #9B6AC8;
+  --th-primary-4: #6AC89B;
+
+  --th-font-display: 'JetBrains Mono';
+  --th-font-body: 'IBM Plex Sans KR';
+  --th-font-mono: 'JetBrains Mono';
+
+  --th-bg-texture: none;
+  --th-bg-overlay: none;
+  --th-glow: none;
+  --th-glass-bg: transparent;
+  --th-glass-blur: 0px;
+
+  /* 모서리 stud 패턴 (테마별로 다르게) */
+  --th-stud-pattern: none;
 }
 
-* {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+* { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
 html, body {
-  background: #F2EFE6;
-  color: #0A0A0A;
-  font-family: var(--font-body, 'IBM Plex Sans KR'), system-ui, sans-serif;
+  background: var(--th-bg);
+  background-image: var(--th-bg-texture);
+  color: var(--th-fg);
+  font-family: var(--th-font-body), system-ui, sans-serif;
+  min-height: 100vh;
 }
 
-/* 노이즈 텍스처 (분위기) */
-.noise {
-  position: relative;
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: var(--th-bg-overlay);
+  z-index: 0;
 }
+
+/* ───────────────────────────────────────
+ *  공통 컴포넌트 (브루털 카드/버튼) — 토큰 사용
+ * ─────────────────────────────────────── */
+
+.noise { position: relative; }
 .noise::before {
   content: '';
   position: absolute;
@@ -34,167 +87,718 @@ html, body {
 }
 .noise > * { position: relative; z-index: 2; }
 
-/* 브루탈 카드 */
 .brut {
-  border: 2px solid #0A0A0A;
-  background: #F2EFE6;
-  box-shadow: 4px 4px 0 0 #0A0A0A;
-  transition: transform 80ms ease, box-shadow 80ms ease;
+  border: var(--th-card-border-w) solid var(--th-border);
+  background: var(--th-card-bg);
+  box-shadow: var(--th-card-shadow);
+  border-radius: var(--th-card-radius);
+  backdrop-filter: blur(var(--th-glass-blur));
+  -webkit-backdrop-filter: blur(var(--th-glass-blur));
+  transition: transform 120ms ease, box-shadow 120ms ease, background 200ms ease;
+  position: relative;
 }
 .brut:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 5px 5px 0 0 #0A0A0A;
+  transform: var(--th-card-hover-transform);
+  box-shadow: var(--th-card-hover-shadow);
 }
 .brut-active {
   transform: translate(2px, 2px);
-  box-shadow: 2px 2px 0 0 #0A0A0A;
+  box-shadow: var(--th-card-shadow-sm);
 }
-
 .brut-tight {
-  border: 2px solid #0A0A0A;
-  background: #F2EFE6;
+  border: var(--th-card-border-w) solid var(--th-border);
+  background: var(--th-card-bg);
+  border-radius: var(--th-card-radius);
 }
 
-/* 버튼 */
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   padding: 0.5rem 0.9rem;
-  border: 2px solid #0A0A0A;
-  background: #F2EFE6;
-  font-family: 'JetBrains Mono', monospace;
+  border: var(--th-card-border-w) solid var(--th-border);
+  background: var(--th-card-bg);
+  color: var(--th-fg);
+  font-family: var(--th-font-mono), monospace;
   font-weight: 500;
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  box-shadow: 3px 3px 0 0 #0A0A0A;
+  border-radius: var(--th-card-radius);
+  box-shadow: var(--th-card-shadow-sm);
   cursor: pointer;
-  transition: transform 80ms ease, box-shadow 80ms ease;
+  transition: transform 100ms ease, box-shadow 100ms ease, background 200ms ease;
 }
-.btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 0 #0A0A0A; }
-.btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 0 #0A0A0A; }
-.btn-primary { background: #C5532E; color: #F2EFE6; }
-.btn-dark { background: #0A0A0A; color: #F2EFE6; }
+.btn:hover { transform: var(--th-card-hover-transform); box-shadow: var(--th-card-shadow); }
+.btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 0 var(--th-fg); }
+.btn-primary { background: var(--th-accent); color: var(--th-bg); }
+.btn-dark { background: var(--th-fg); color: var(--th-bg); }
 
-/* 마키 (회전하는 텍스트) */
-@keyframes marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-.marquee {
-  display: flex;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.marquee-inner {
-  display: flex;
-  gap: 3rem;
-  animation: marquee 40s linear infinite;
-}
+/* 마키 */
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.marquee { display: flex; overflow: hidden; white-space: nowrap; }
+.marquee-inner { display: flex; gap: 3rem; animation: marquee 40s linear infinite; }
 
-/* 작은 페이드 in */
+/* 페이드 / 스냅 / 백드롭 */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.fade-up { animation: fadeUp 200ms ease both; }
+.fade-up { animation: fadeUp 220ms ease both; }
 
-/* ─────────────────────────────────────
- * Lego 테마 — 살짝 빠지는 정도 (브루털리스트 베이스 유지)
- * ───────────────────────────────────── */
-
-/* Brick stud — 카드 우상단 작은 점 */
-.stud {
-  position: relative;
-}
-.stud::after {
-  content: '';
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.18;
-}
-.stud-done::after {
-  background: #C5532E;
-  opacity: 1;
-}
-
-/* Lego primaries (mute톤) — 4축 컬러 토큰 */
-:root {
-  --lego-blue: #4A8DD1;   /* 트리거 */
-  --lego-yellow: #F4D300; /* 도구 */
-  --lego-purple: #9B6AC8; /* 규칙 */
-  --lego-green: #6AC89B;  /* 상태 */
-}
-
-/* Snap 애니메이션 — 셀 클리어 시 살짝 살아남 */
 @keyframes snapIn {
   0%   { transform: translateY(-8px) rotate(-2deg); opacity: 0; }
   60%  { transform: translateY(2px) rotate(1deg); opacity: 1; }
   100% { transform: translateY(0) rotate(0deg); }
 }
-.snap-in { animation: snapIn 280ms cubic-bezier(.34,1.56,.64,1) both; }
+.snap-in { animation: snapIn 320ms cubic-bezier(.34,1.56,.64,1) both; }
 
-/* Brick row — 헤더의 piece counter (9개 stud 가로 배치) */
-.brick-row {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
+@keyframes brickClick {
+  0%   { transform: translate(0,0); box-shadow: var(--th-card-shadow); }
+  50%  { transform: translate(2px,2px) scale(0.97); box-shadow: var(--th-card-shadow-sm); }
+  100% { transform: translate(0,0); box-shadow: var(--th-card-shadow); }
 }
-.brick-stud {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.15);
-  transition: background 200ms ease;
-}
-.brick-stud-on { background: #0A0A0A; }
+.brick-click { animation: brickClick 220ms ease both; }
 
-/* Brick shadow — 살짝 입체감 (브루털 기존 그림자 위에 살짝) */
-.brick {
-  position: relative;
-  border-top: 2px solid rgba(255,255,255,0.4);
-  border-left: 2px solid rgba(255,255,255,0.2);
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: var(--th-card-shadow); }
+  50%      { box-shadow: var(--th-card-shadow), 0 0 24px var(--th-accent); }
 }
-.brick::before {
-  content: '';
+.glow-pulse { animation: glow-pulse 1.6s ease-in-out infinite; }
+
+@keyframes confetti-pop {
+  0%   { transform: scale(0); opacity: 1; }
+  100% { transform: scale(1.6) translate(var(--cx,0), var(--cy,0)); opacity: 0; }
+}
+.confetti-dot {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 10px;
-  height: 10px;
+  width: 6px; height: 6px;
   border-radius: 50%;
-  background: rgba(0,0,0,0.1);
   pointer-events: none;
+  animation: confetti-pop 700ms ease-out forwards;
 }
 
-/* 모달 backdrop fade */
 @keyframes backdropFade {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 .backdrop-fade { animation: backdropFade 200ms ease both; }
 
-/* 타이핑 인디케이터 (사람처럼 "…" 작성 중) */
 @keyframes typingBounce {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
   30% { transform: translateY(-4px); opacity: 1; }
 }
 .typing-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 9999px;
-  background: #0A0A0A;
+  width: 7px; height: 7px; border-radius: 9999px;
+  background: var(--th-fg);
   display: inline-block;
   animation: typingBounce 1s ease-in-out infinite;
+}
+
+/* Stud */
+.stud { position: relative; }
+.stud::after {
+  content: '';
+  position: absolute;
+  top: 6px; right: 6px;
+  width: var(--th-stud-size);
+  height: var(--th-stud-size);
+  border-radius: var(--th-stud-radius);
+  background: var(--th-stud-color);
+  opacity: 0.18;
+}
+.stud-done::after { background: var(--th-accent); opacity: 1; }
+
+/* Brick row (헤더 piece counter) */
+.brick-row { display: inline-flex; gap: 4px; align-items: center; }
+.brick-stud {
+  width: 10px; height: 10px;
+  border-radius: var(--th-stud-radius);
+  background: color-mix(in srgb, var(--th-fg) 15%, transparent);
+  transition: background 200ms ease;
+}
+.brick-stud-on { background: var(--th-fg); }
+
+/* Brick effect — 클리어된 셀에 입체감 */
+.brick {
+  position: relative;
+  border-top: 2px solid color-mix(in srgb, white 40%, transparent);
+  border-left: 2px solid color-mix(in srgb, white 20%, transparent);
+}
+.brick::before {
+  content: '';
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 10px; height: 10px;
+  border-radius: var(--th-stud-radius);
+  background: color-mix(in srgb, black 10%, transparent);
+  pointer-events: none;
+}
+
+/* Chat message bubble */
+.msg-in {
+  animation: fadeUp 240ms cubic-bezier(.34,1.56,.64,1) both;
+}
+
+@keyframes pulseHighlight {
+  0% { background-color: var(--th-accent); }
+  100% { background-color: transparent; }
+}
+.row-pulse { animation: pulseHighlight 800ms ease-out; }
+
+/* 빙고 셀 hover micro */
+.bingo-cell {
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+.bingo-cell:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+.bingo-cell.done {
+  position: relative;
+}
+
+/* 클릭한 셀 깜빡 */
+@keyframes cellPop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+.cell-pop { animation: cellPop 200ms ease-out; }
+
+/* 청사진 연결선 dash 흐름 */
+@keyframes dashFlow {
+  to { stroke-dashoffset: -100; }
+}
+.dash-flow { animation: dashFlow 4s linear infinite; }
+
+/* 카드 도착시 stagger */
+.stagger > * { animation: fadeUp 300ms cubic-bezier(.34,1.56,.64,1) both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(6) { animation-delay: 300ms; }
+.stagger > *:nth-child(7) { animation-delay: 360ms; }
+.stagger > *:nth-child(8) { animation-delay: 420ms; }
+.stagger > *:nth-child(9) { animation-delay: 480ms; }
+
+/* Brick-tower (cell clear rates 시각화용) */
+.brick-tower {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  height: 100%;
+}
+.brick-tower-cell {
+  height: 7px;
+  background: color-mix(in srgb, var(--th-fg) 12%, transparent);
+  border-radius: 1px;
+}
+.brick-tower-cell.fill {
+  background: var(--th-accent);
 }
 
 /* 스크롤바 */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #0A0A0A; border-radius: 0; }
+::-webkit-scrollbar-thumb { background: var(--th-fg); border-radius: 0; }
+
+
+/* ═══════════════════════════════════════════════════════════
+ *  20 테마 — [data-theme='X'] 로 활성화
+ * ═══════════════════════════════════════════════════════════ */
+
+/* ── 02. Lego Classic — 정통 RYBG primary, 화이트, 라운드 ── */
+[data-theme='lego-classic'] {
+  --th-bg: #FFFFFF;
+  --th-bg-alt: #F5F5F5;
+  --th-bg-elevated: #FAFAFA;
+  --th-fg: #111111;
+  --th-fg-strong: #000000;
+  --th-muted: #6B6B6B;
+  --th-border: #111111;
+  --th-accent: #DA291C;        /* Lego red */
+  --th-accent2: #006DB7;       /* Lego blue */
+  --th-card-shadow: 0 3px 0 0 #111111, 0 4px 12px -4px rgba(0,0,0,0.15);
+  --th-card-shadow-sm: 0 2px 0 0 #111111;
+  --th-card-radius: 6px;
+  --th-card-bg: #FFFFFF;
+  --th-card-hover-transform: translateY(-2px);
+  --th-card-hover-shadow: 0 6px 0 0 #111111, 0 8px 20px -4px rgba(0,0,0,0.18);
+  --th-stud-color: #DA291C;
+  --th-primary-1: #006DB7;
+  --th-primary-2: #FFD500;
+  --th-primary-3: #DA291C;
+  --th-primary-4: #00A551;
+}
+
+/* ── 03. Lego Minimal — 옐로 단색 accent, 크림 ── */
+[data-theme='lego-minimal'] {
+  --th-bg: #FAF6EC;
+  --th-bg-alt: #F0EBDB;
+  --th-bg-elevated: #FFFCF1;
+  --th-fg: #2A2419;
+  --th-fg-strong: #1A1610;
+  --th-muted: #8A8275;
+  --th-border: #2A2419;
+  --th-accent: #E8B400;
+  --th-accent2: #2A2419;
+  --th-card-shadow: 0 2px 0 0 #2A2419;
+  --th-card-shadow-sm: 0 1px 0 0 #2A2419;
+  --th-card-radius: 4px;
+  --th-card-bg: #FFFCF1;
+  --th-card-border-w: 1.5px;
+  --th-card-hover-transform: translateY(-1px);
+  --th-card-hover-shadow: 0 3px 0 0 #2A2419;
+  --th-stud-color: #E8B400;
+}
+
+/* ── 04. Lego Architectural — 회색 + 검정 + 빨강, 도면 ── */
+[data-theme='lego-architectural'] {
+  --th-bg: #ECECEC;
+  --th-bg-alt: #DDDDDD;
+  --th-bg-elevated: #F5F5F5;
+  --th-fg: #1A1A1A;
+  --th-fg-strong: #000000;
+  --th-muted: #707070;
+  --th-border: #1A1A1A;
+  --th-accent: #C00000;
+  --th-accent2: #404040;
+  --th-card-shadow: 3px 3px 0 0 #1A1A1A;
+  --th-card-shadow-sm: 1px 1px 0 0 #1A1A1A;
+  --th-card-radius: 0px;
+  --th-card-bg: #F5F5F5;
+  --th-card-border-w: 1.5px;
+  --th-bg-texture: linear-gradient(135deg, #ECECEC 1px, transparent 1px), linear-gradient(45deg, #ECECEC 1px, transparent 1px);
+  --th-bg-overlay: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,0,0,0.03) 39px, rgba(0,0,0,0.03) 40px);
+  --th-stud-color: #C00000;
+}
+
+/* ── 05. Lego Pastel — 부드러운 크림/민트/연핑크 ── */
+[data-theme='lego-pastel'] {
+  --th-bg: #FDF6F0;
+  --th-bg-alt: #F5E8DE;
+  --th-bg-elevated: #FFFAF5;
+  --th-fg: #3D2E2E;
+  --th-fg-strong: #2A1F1F;
+  --th-muted: #A99595;
+  --th-border: #C4A8A8;
+  --th-accent: #E89B9B;
+  --th-accent2: #9BD4C4;
+  --th-card-shadow: 0 3px 14px -3px rgba(196,168,168,0.4);
+  --th-card-shadow-sm: 0 1px 4px -1px rgba(196,168,168,0.3);
+  --th-card-radius: 12px;
+  --th-card-bg: #FFFAF5;
+  --th-card-border-w: 1px;
+  --th-card-hover-transform: translateY(-2px);
+  --th-card-hover-shadow: 0 6px 20px -3px rgba(196,168,168,0.5);
+  --th-stud-color: #E89B9B;
+  --th-stud-radius: 50%;
+  --th-primary-1: #B5D8F0; --th-primary-2: #F6E8A1;
+  --th-primary-3: #D4B3E8; --th-primary-4: #9BD4C4;
+}
+
+/* ── 06. Lego Noir — 다크 + 옐로 네온 ── */
+[data-theme='lego-noir'] {
+  color-scheme: dark;
+  --th-bg: #0E0E12;
+  --th-bg-alt: #1A1A22;
+  --th-bg-elevated: #1F1F28;
+  --th-fg: #F2E9D7;
+  --th-fg-strong: #FFFFFF;
+  --th-muted: #8A8278;
+  --th-border: #F4D300;
+  --th-accent: #F4D300;
+  --th-accent2: #FF6B35;
+  --th-card-shadow: 4px 4px 0 0 #F4D300;
+  --th-card-shadow-sm: 2px 2px 0 0 #F4D300;
+  --th-card-radius: 0px;
+  --th-card-bg: #1A1A22;
+  --th-card-border-w: 1.5px;
+  --th-card-hover-transform: translate(-1px, -1px);
+  --th-card-hover-shadow: 5px 5px 0 0 #F4D300, 0 0 24px -8px #F4D300;
+  --th-stud-color: #F4D300;
+  --th-glow: 0 0 18px -4px #F4D300;
+  --th-bg-overlay: radial-gradient(ellipse at top, rgba(244,211,0,0.04), transparent 60%);
+}
+
+/* ── 07. Lego Cyber — 블랙 + 일렉트릭 시안/마젠타 ── */
+[data-theme='lego-cyber'] {
+  color-scheme: dark;
+  --th-bg: #050510;
+  --th-bg-alt: #0F0F1F;
+  --th-bg-elevated: #14142A;
+  --th-fg: #E0F7FF;
+  --th-fg-strong: #FFFFFF;
+  --th-muted: #6B7A92;
+  --th-border: #00E5FF;
+  --th-accent: #FF2E97;
+  --th-accent2: #00E5FF;
+  --th-card-shadow: 0 0 0 1px #00E5FF, 0 0 24px -6px #00E5FF;
+  --th-card-shadow-sm: 0 0 0 1px #00E5FF;
+  --th-card-radius: 2px;
+  --th-card-bg: rgba(15, 15, 31, 0.85);
+  --th-card-border-w: 1px;
+  --th-card-hover-transform: translateY(-1px);
+  --th-card-hover-shadow: 0 0 0 1px #FF2E97, 0 0 32px -4px #FF2E97;
+  --th-stud-color: #FF2E97;
+  --th-glow: 0 0 14px -2px #00E5FF;
+  --th-bg-texture: linear-gradient(180deg, #050510 0%, #0A0A1F 100%);
+  --th-bg-overlay: repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,229,255,0.02) 2px, rgba(0,229,255,0.02) 3px);
+  --th-font-display: 'Space Grotesk';
+}
+
+/* ── 08. Lego Construction — 옐로/블랙 줄무늬, 공사 ── */
+[data-theme='lego-construction'] {
+  --th-bg: #FFF9E6;
+  --th-bg-alt: #FFEDB3;
+  --th-bg-elevated: #FFFCED;
+  --th-fg: #1A1300;
+  --th-fg-strong: #000000;
+  --th-muted: #7A6A2E;
+  --th-border: #1A1300;
+  --th-accent: #FFB800;
+  --th-accent2: #1A1300;
+  --th-card-shadow: 4px 4px 0 0 #1A1300;
+  --th-card-shadow-sm: 2px 2px 0 0 #1A1300;
+  --th-card-radius: 0px;
+  --th-card-bg: #FFFCED;
+  --th-bg-texture: repeating-linear-gradient(45deg, transparent, transparent 18px, rgba(26,19,0,0.04) 18px, rgba(26,19,0,0.04) 20px, transparent 20px, transparent 38px, rgba(255,184,0,0.12) 38px, rgba(255,184,0,0.12) 40px);
+  --th-stud-color: #FFB800;
+}
+
+/* ── 09. Lego Paper — 종이질감, 부드러운 그림자 ── */
+[data-theme='lego-paper'] {
+  --th-bg: #F4EFE0;
+  --th-bg-alt: #E8E0CC;
+  --th-bg-elevated: #FFFCF1;
+  --th-fg: #2E2618;
+  --th-fg-strong: #1A1308;
+  --th-muted: #8A7E68;
+  --th-border: #6A5E4A;
+  --th-accent: #B85C2E;
+  --th-accent2: #5A7C5A;
+  --th-card-shadow: 0 4px 18px -4px rgba(46,38,24,0.3), 0 2px 4px -2px rgba(46,38,24,0.2);
+  --th-card-shadow-sm: 0 2px 8px -2px rgba(46,38,24,0.2);
+  --th-card-radius: 3px;
+  --th-card-bg: #FFFCF1;
+  --th-card-border-w: 0px;
+  --th-card-hover-transform: translateY(-3px) rotate(-0.3deg);
+  --th-card-hover-shadow: 0 8px 24px -4px rgba(46,38,24,0.35);
+  --th-stud-color: #B85C2E;
+  --th-bg-texture: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.15  0 0 0 0 0.09  0 0 0 0.07 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  --th-font-display: 'DM Serif Display';
+}
+
+/* ── 10. Lego Studio — 프리미엄: 블랙 + 크림 + 골드 ── */
+[data-theme='lego-studio'] {
+  --th-bg: #18130C;
+  --th-bg-alt: #221C12;
+  --th-bg-elevated: #2A2218;
+  --th-fg: #F0E6D2;
+  --th-fg-strong: #FFFFFF;
+  --th-muted: #978B72;
+  --th-border: #C9A857;
+  --th-accent: #C9A857;
+  --th-accent2: #F0E6D2;
+  --th-card-shadow: 0 4px 24px -6px rgba(201,168,87,0.25);
+  --th-card-shadow-sm: 0 2px 8px -2px rgba(201,168,87,0.15);
+  --th-card-radius: 4px;
+  --th-card-bg: #221C12;
+  --th-card-border-w: 1px;
+  --th-card-hover-transform: translateY(-2px);
+  --th-card-hover-shadow: 0 6px 32px -6px rgba(201,168,87,0.4);
+  --th-stud-color: #C9A857;
+  color-scheme: dark;
+}
+
+/* ── 11. Lego Friends — 핑크 + 틸 + 라벤더 ── */
+[data-theme='lego-friends'] {
+  --th-bg: #FFF0F5;
+  --th-bg-alt: #FCD8E5;
+  --th-bg-elevated: #FFF8FB;
+  --th-fg: #6B2D4A;
+  --th-fg-strong: #4A1E33;
+  --th-muted: #B58FA1;
+  --th-border: #D86098;
+  --th-accent: #FF4D8F;
+  --th-accent2: #4DD0D0;
+  --th-card-shadow: 0 3px 0 0 #D86098, 0 6px 16px -4px rgba(216,96,152,0.25);
+  --th-card-shadow-sm: 0 2px 0 0 #D86098;
+  --th-card-radius: 16px;
+  --th-card-bg: #FFF8FB;
+  --th-card-border-w: 2px;
+  --th-card-hover-transform: translateY(-2px) rotate(-0.5deg);
+  --th-card-hover-shadow: 0 6px 0 0 #D86098, 0 10px 24px -4px rgba(216,96,152,0.35);
+  --th-stud-color: #FF4D8F;
+  --th-primary-1: #FF4D8F; --th-primary-2: #FFB84D;
+  --th-primary-3: #B84DFF; --th-primary-4: #4DD0D0;
+}
+
+/* ── 12. Lego Beach — 모래 + 오션 + 코랄 ── */
+[data-theme='lego-beach'] {
+  --th-bg: #F5E8D0;
+  --th-bg-alt: #E8D4A8;
+  --th-bg-elevated: #FFF4DE;
+  --th-fg: #1A3A5C;
+  --th-fg-strong: #0F2640;
+  --th-muted: #6A8AA8;
+  --th-border: #1A3A5C;
+  --th-accent: #FF6F61;
+  --th-accent2: #1A8FBF;
+  --th-card-shadow: 0 4px 0 0 #1A3A5C;
+  --th-card-shadow-sm: 0 2px 0 0 #1A3A5C;
+  --th-card-radius: 8px;
+  --th-card-bg: #FFF4DE;
+  --th-bg-texture: linear-gradient(180deg, #F5E8D0 0%, #E8D4A8 100%);
+  --th-stud-color: #FF6F61;
+}
+
+/* ── 13. Lego Forest — 그린, 유기적 ── */
+[data-theme='lego-forest'] {
+  --th-bg: #E8EFE0;
+  --th-bg-alt: #C8D6B5;
+  --th-bg-elevated: #F2F7EB;
+  --th-fg: #1F3A1F;
+  --th-fg-strong: #0F2210;
+  --th-muted: #607E60;
+  --th-border: #1F3A1F;
+  --th-accent: #5C9C5C;
+  --th-accent2: #B85C2E;
+  --th-card-shadow: 0 3px 0 0 #1F3A1F, 0 6px 14px -4px rgba(31,58,31,0.25);
+  --th-card-shadow-sm: 0 2px 0 0 #1F3A1F;
+  --th-card-radius: 10px;
+  --th-card-bg: #F2F7EB;
+  --th-card-border-w: 1.5px;
+  --th-stud-color: #5C9C5C;
+}
+
+/* ── 14. Lego Vintage — 세피아 + 더스티 ── */
+[data-theme='lego-vintage'] {
+  --th-bg: #E8DDC4;
+  --th-bg-alt: #D8C9A8;
+  --th-bg-elevated: #F4EBD2;
+  --th-fg: #3A2A18;
+  --th-fg-strong: #221806;
+  --th-muted: #8A7660;
+  --th-border: #3A2A18;
+  --th-accent: #A8553A;
+  --th-accent2: #5A6A3A;
+  --th-card-shadow: 3px 3px 0 0 #3A2A18;
+  --th-card-shadow-sm: 1px 1px 0 0 #3A2A18;
+  --th-card-radius: 2px;
+  --th-card-bg: #F4EBD2;
+  --th-bg-texture: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.22  0 0 0 0 0.16  0 0 0 0 0.08  0 0 0 0.05 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  --th-stud-color: #A8553A;
+  --th-font-display: 'DM Serif Display';
+}
+
+/* ── 15. Lego Glass — 프로스트 글래스, 백드롭 블러 ── */
+[data-theme='lego-glass'] {
+  --th-bg: #2D2D5E;
+  --th-bg-alt: #3D3D7E;
+  --th-bg-elevated: rgba(255,255,255,0.10);
+  --th-fg: #F0F4FF;
+  --th-fg-strong: #FFFFFF;
+  --th-muted: #B0B8D0;
+  --th-border: rgba(255,255,255,0.25);
+  --th-accent: #6EC1FF;
+  --th-accent2: #FFB84D;
+  --th-card-shadow: 0 8px 32px -4px rgba(0,0,0,0.3);
+  --th-card-shadow-sm: 0 2px 8px -2px rgba(0,0,0,0.2);
+  --th-card-radius: 14px;
+  --th-card-bg: rgba(255,255,255,0.10);
+  --th-card-border-w: 1px;
+  --th-glass-blur: 12px;
+  --th-card-hover-transform: translateY(-2px);
+  --th-card-hover-shadow: 0 14px 40px -4px rgba(0,0,0,0.4);
+  --th-stud-color: rgba(255,255,255,0.6);
+  --th-bg-texture: linear-gradient(135deg, #2D2D5E 0%, #5A2D7E 50%, #2D5E5A 100%);
+  color-scheme: dark;
+}
+
+/* ── 16. Lego Brickwall — 벽돌 텍스처 배경 ── */
+[data-theme='lego-brickwall'] {
+  --th-bg: #C4736B;
+  --th-bg-alt: #A85A52;
+  --th-bg-elevated: #FAF2EC;
+  --th-fg: #1A1108;
+  --th-fg-strong: #000000;
+  --th-muted: #8A6A60;
+  --th-border: #1A1108;
+  --th-accent: #1A1108;
+  --th-accent2: #FAF2EC;
+  --th-card-shadow: 4px 4px 0 0 #1A1108;
+  --th-card-shadow-sm: 2px 2px 0 0 #1A1108;
+  --th-card-radius: 4px;
+  --th-card-bg: #FAF2EC;
+  --th-card-border-w: 2px;
+  --th-bg-texture: linear-gradient(335deg, #B66A60 22%, transparent 22%) 0 0/40px 20px, linear-gradient(335deg, #B66A60 22%, transparent 22%) 20px 10px/40px 20px, #C4736B;
+  --th-stud-color: #1A1108;
+}
+
+/* ── 17. Lego Mono — 순 흑백 ── */
+[data-theme='lego-mono'] {
+  --th-bg: #FFFFFF;
+  --th-bg-alt: #F2F2F2;
+  --th-bg-elevated: #FAFAFA;
+  --th-fg: #000000;
+  --th-fg-strong: #000000;
+  --th-muted: #808080;
+  --th-border: #000000;
+  --th-accent: #000000;
+  --th-accent2: #404040;
+  --th-card-shadow: 4px 4px 0 0 #000000;
+  --th-card-shadow-sm: 2px 2px 0 0 #000000;
+  --th-card-radius: 0px;
+  --th-card-bg: #FFFFFF;
+  --th-card-border-w: 2px;
+  --th-stud-color: #000000;
+  --th-primary-1: #000; --th-primary-2: #555; --th-primary-3: #888; --th-primary-4: #BBB;
+}
+
+/* ── 18. Lego Sunrise — 따뜻한 그라데이션 ── */
+[data-theme='lego-sunrise'] {
+  --th-bg: #FFE4D0;
+  --th-bg-alt: #FFCDB0;
+  --th-bg-elevated: #FFF4E8;
+  --th-fg: #4A1F0F;
+  --th-fg-strong: #2A0F08;
+  --th-muted: #A8755C;
+  --th-border: #4A1F0F;
+  --th-accent: #FF6B1F;
+  --th-accent2: #FFAA1F;
+  --th-card-shadow: 0 4px 0 0 #4A1F0F, 0 8px 24px -8px rgba(255,107,31,0.4);
+  --th-card-shadow-sm: 0 2px 0 0 #4A1F0F;
+  --th-card-radius: 10px;
+  --th-card-bg: #FFF4E8;
+  --th-bg-texture: linear-gradient(180deg, #FFCC80 0%, #FFE4D0 60%, #FFF4E8 100%);
+  --th-stud-color: #FF6B1F;
+}
+
+/* ── 19. Lego Studs Prominent — 큰 stud + 톤다운 ── */
+[data-theme='lego-studs-prominent'] {
+  --th-bg: #EDE7DC;
+  --th-bg-alt: #DDD3C0;
+  --th-bg-elevated: #F7F2E8;
+  --th-fg: #1F1A12;
+  --th-fg-strong: #000000;
+  --th-muted: #7A6F60;
+  --th-border: #1F1A12;
+  --th-accent: #C5532E;
+  --th-accent2: #3E5C3E;
+  --th-card-shadow: 5px 5px 0 0 #1F1A12;
+  --th-card-shadow-sm: 3px 3px 0 0 #1F1A12;
+  --th-card-radius: 6px;
+  --th-card-bg: #F7F2E8;
+  --th-card-border-w: 2px;
+  --th-stud-color: #C5532E;
+  --th-stud-size: 14px;
+}
+
+/* ── 20. Lego Plate — 평평한 베이스플레이트 ── */
+[data-theme='lego-plate'] {
+  --th-bg: #4A8A4A;
+  --th-bg-alt: #3A7A3A;
+  --th-bg-elevated: #FAFAFA;
+  --th-fg: #1A1A1A;
+  --th-fg-strong: #000000;
+  --th-muted: #6A7A6A;
+  --th-border: #1A1A1A;
+  --th-accent: #FFD500;
+  --th-accent2: #DA291C;
+  --th-card-shadow: 0 2px 0 0 #1A1A1A;
+  --th-card-shadow-sm: 0 1px 0 0 #1A1A1A;
+  --th-card-radius: 3px;
+  --th-card-bg: #FAFAFA;
+  --th-card-border-w: 1.5px;
+  --th-bg-texture: radial-gradient(circle, #5A9A5A 1.5px, transparent 2px);
+  --th-stud-color: #FFD500;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+ *  테마별 특수 효과 / 마이크로 인터랙션
+ * ═══════════════════════════════════════════════════════════ */
+
+/* Cyber/Noir 텍스트 글로우 */
+[data-theme='lego-cyber'] h1,
+[data-theme='lego-cyber'] h2,
+[data-theme='lego-noir'] h1,
+[data-theme='lego-noir'] h2 {
+  text-shadow: 0 0 16px var(--th-accent);
+}
+
+/* Cyber 스캔라인 */
+[data-theme='lego-cyber'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0, transparent 3px, rgba(0,229,255,0.025) 3px, rgba(0,229,255,0.025) 4px);
+  z-index: 9999;
+}
+
+/* Construction 옐로/블랙 줄무늬 띠 (top/bottom of cards) */
+[data-theme='lego-construction'] .brut::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: -1px; right: -1px;
+  height: 4px;
+  background: repeating-linear-gradient(45deg, #FFB800, #FFB800 8px, #1A1300 8px, #1A1300 16px);
+  pointer-events: none;
+}
+
+/* Paper 살짝 회전 */
+[data-theme='lego-paper'] .brut {
+  transform: rotate(-0.2deg);
+}
+[data-theme='lego-paper'] .brut:nth-child(2n) {
+  transform: rotate(0.3deg);
+}
+
+/* Glass 백드롭 + 글래스 효과 강조 */
+[data-theme='lego-glass'] .brut {
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+}
+
+/* Studs Prominent — 카드 상단에 stud 4개 가로 배치 */
+[data-theme='lego-studs-prominent'] .brut::before {
+  content: '';
+  position: absolute;
+  top: -10px; left: 8px;
+  width: calc(100% - 16px);
+  height: 16px;
+  background-image: radial-gradient(circle, var(--th-accent) 4px, transparent 5px);
+  background-size: 26px 16px;
+  background-repeat: repeat-x;
+  pointer-events: none;
+}
+
+/* Brickwall — 카드 우상단 stud 표시 강조 */
+[data-theme='lego-brickwall'] .brut {
+  border-bottom: 4px solid #1A1108;
+}
+
+/* Cyber/Noir 스크롤바 컬러 */
+[data-theme='lego-cyber'] ::-webkit-scrollbar-thumb { background: var(--th-accent2); }
+[data-theme='lego-noir'] ::-webkit-scrollbar-thumb { background: var(--th-accent); }
+[data-theme='lego-studio'] ::-webkit-scrollbar-thumb { background: var(--th-accent); }
+[data-theme='lego-glass'] ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.4); }
+
+/* Plate — 베이스플레이트 stud 배경 */
+[data-theme='lego-plate'] body {
+  background-size: 28px 28px;
+  background-position: 0 0;
+}
+
+/* Studio — 카드에 미세한 골드 라인 */
+[data-theme='lego-studio'] .brut {
+  border-color: rgba(201,168,87,0.4);
+}
+
+/* Friends — 카드 살짝 회전 */
+[data-theme='lego-friends'] .brut:nth-child(3n) { transform: rotate(0.5deg); }
+[data-theme='lego-friends'] .brut:nth-child(3n+1) { transform: rotate(-0.4deg); }

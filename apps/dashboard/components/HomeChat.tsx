@@ -554,13 +554,25 @@ export function HomeChat() {
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((m, i) => (
-          <div key={i} className="space-y-2 fade-up">
+          <div key={i} className="space-y-2 msg-in">
             {m.content && (
-              <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}>
+                {m.role === 'assistant' && (
+                  <span
+                    aria-hidden
+                    className="text-lg leading-none shrink-0 select-none"
+                    style={{ marginBottom: 4 }}
+                  >
+                    🐱
+                  </span>
+                )}
                 <div
-                  className={`max-w-[85%] px-4 py-3 text-sm whitespace-pre-wrap leading-relaxed ${
-                    m.role === 'user' ? 'bg-ink text-paper' : 'bg-sand border-2 border-ink'
+                  className={`max-w-[80%] px-4 py-3 text-sm whitespace-pre-wrap leading-relaxed ${
+                    m.role === 'user'
+                      ? 'bg-ink text-paper'
+                      : 'bg-sand border-2 border-line'
                   }`}
+                  style={{ borderRadius: 'var(--th-card-radius, 0)' }}
                 >
                   {m.content}
                 </div>

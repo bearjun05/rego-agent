@@ -20,24 +20,33 @@ export function CellClearRates() {
   }, []);
 
   return (
-    <div className="brut p-4 bg-paper">
-      <div className="font-display font-bold text-sm mb-3">📊 셀별 클리어율</div>
-      <div className="grid grid-cols-3 gap-2">
+    <div className="brut p-4">
+      <div className="font-display font-bold text-sm mb-4">📊 셀별 클리어율</div>
+      <div className="grid grid-cols-9 gap-2 h-40">
         {data.map((c) => {
-          const pct = Math.round(c.rate * 100);
+          const fillCount = Math.round(c.rate * 10);
           return (
-            <div key={c.id} className="brut p-2 bg-sand text-center">
-              <div className="font-mono text-[10px] text-muted">셀 {c.id}</div>
-              <div className="font-display font-bold text-xs leading-tight my-1">
-                {c.short}
+            <div key={c.id} className="flex flex-col items-center justify-end gap-2">
+              <div className="brick-tower w-full flex-1 max-h-32">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`brick-tower-cell ${i < fillCount ? 'fill' : ''}`}
+                  />
+                ))}
               </div>
-              <div className="font-display font-extrabold text-2xl">{pct}%</div>
-              <div className="font-mono text-[10px] text-muted">
-                {c.done}/{c.total}명
+              <div className="text-center">
+                <div className="font-display font-extrabold text-sm leading-none">
+                  {Math.round(c.rate * 100)}%
+                </div>
+                <div className="font-mono text-[9px] text-muted mt-0.5">셀{c.id}</div>
               </div>
             </div>
           );
         })}
+      </div>
+      <div className="font-mono text-[10px] text-muted text-center mt-3">
+        16명 중 몇 명이 각 셀을 클리어했나
       </div>
     </div>
   );

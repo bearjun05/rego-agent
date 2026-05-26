@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface AgentRow {
   name: string;
@@ -23,6 +23,8 @@ interface MonitorResponse {
 export function MonitorCard({ compact = false }: { compact?: boolean }) {
   const [data, setData] = useState<MonitorResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [changedRows, setChangedRows] = useState<Set<string>>(new Set());
+  const prevRef = useRef<Map<string, AgentRow>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -30,10 +32,22 @@ export function MonitorCard({ compact = false }: { compact?: boolean }) {
       fetch('/api/runtime/bingo/all')
         .then((r) => r.json())
         .then((d: MonitorResponse) => {
-          if (!cancelled) {
-            setData(d);
-            setLoading(false);
+          if (cancelled) return;
+          // 변경된 row 감지 → pulse 효과
+          const changed = new Set<string>();
+          for (const row of d.rows) {
+            const prev = prevRef.current.get(row.name);
+            if (prev && (prev.bingoDone !== row.bingoDone || prev.lastActivityMinsAgo !== row.lastActivityMinsAgo)) {
+              changed.add(row.name);
+            }
+            prevRef.current.set(row.name, row);
           }
+          if (changed.size > 0) {
+            setChangedRows(changed);
+            setTimeout(() => setChangedRows(new Set()), 900);
+          }
+          setData(d);
+          setLoading(false);
         })
         .catch(() => {
           if (!cancelled) setLoading(false);
@@ -48,44 +62,35 @@ export function MonitorCard({ compact = false }: { compact?: boolean }) {
   }, []);
 
   if (loading && !data) {
-    return (
-      <div className="brut p-3 bg-paper font-mono text-xs text-muted">
-        모니터링 데이터 불러오는 중...
-      </div>
-    );
+    return <div className="brut p-3 font-mono text-xs text-muted">모니터링 불러오는 중…</div>;
   }
   if (!data) {
-    return (
-      <div className="brut p-3 bg-paper font-mono text-xs text-rust">
-        데이터를 불러오지 못했어요.
-      </div>
-    );
+    return <div className="brut p-3 font-mono text-xs text-rust">데이터를 불러오지 못했어요.</div>;
   }
 
   return (
-    <div className="brut p-3 bg-paper">
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-display font-bold text-sm">📊 스터디 실시간</span>
+    <div className="brut p-4">
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-display font-bold text-sm">📊 16명 실시간</span>
         <div className="flex gap-3 font-mono text-[10px]">
-          <span>전체 {data.total}</span>
-          <span className="text-ink">완주 {data.done}</span>
-          <span className="text-rust">활동 {data.active}</span>
-          <span className="text-muted">막힘 {data.stuck}</span>
+          <Stat label="전체" value={data.total} />
+          <Stat label="완주" value={data.done} accent />
+          <Stat label="활동" value={data.active} pulse />
+          <Stat label="막힘" value={data.stuck} muted />
         </div>
       </div>
       <div className={`overflow-y-auto ${compact ? 'max-h-[280px]' : 'max-h-[480px]'}`}>
         <table className="w-full text-xs">
-          <thead className="font-mono text-[10px] text-muted">
-            <tr className="border-b border-ink">
-              <th className="text-left py-1">이름</th>
-              <th className="text-left py-1">빙고</th>
-              <th className="text-left py-1">마지막 활동</th>
-              <th className="text-left py-1">상태</th>
+          <thead className="font-mono text-[10px] text-muted sticky top-0 bg-paper">
+            <tr className="border-b-2 border-line">
+              <th className="text-left py-1.5">이름</th>
+              <th className="text-left py-1.5">진행</th>
+              <th className="text-left py-1.5">마지막</th>
+              <th className="text-left py-1.5">상태</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="stagger">
             {data.rows.map((r) => {
-              const bar = '█'.repeat(r.bingoDone) + '░'.repeat(9 - r.bingoDone);
               const status = r.stuck
                 ? '🟡 막힘'
                 : r.lastActivityMinsAgo !== null && r.lastActivityMinsAgo < 5
@@ -95,16 +100,34 @@ export function MonitorCard({ compact = false }: { compact?: boolean }) {
                     : r.bingoDone > 0
                       ? '⏸ 일시정지'
                       : '⚪ 미시작';
+              const isChanged = changedRows.has(r.name);
               return (
-                <tr key={r.name} className="border-b border-ink/10 hover:bg-sand/50">
+                <tr key={r.name} className={`border-b border-line/15 ${isChanged ? 'row-pulse' : ''}`}>
                   <td className="py-1 font-display">
                     {r.displayName ?? r.name}
                     {!r.telegramConnected && (
                       <span className="ml-1 text-[9px] text-rust">[텔레그램 미등록]</span>
                     )}
                   </td>
-                  <td className="py-1 font-mono">
-                    <span className="text-[10px]">{bar}</span> {r.bingoDone}/9
+                  <td className="py-1">
+                    <div className="flex gap-0.5 items-center">
+                      {Array.from({ length: 9 }).map((_, i) => (
+                        <span
+                          key={i}
+                          className="w-1.5 h-2.5"
+                          style={{
+                            background:
+                              i < r.bingoDone
+                                ? 'var(--th-accent)'
+                                : 'color-mix(in srgb, var(--th-fg) 10%, transparent)',
+                            borderRadius: 1,
+                          }}
+                        />
+                      ))}
+                      <span className="font-mono text-[10px] text-muted ml-1.5">
+                        {r.bingoDone}/9
+                      </span>
+                    </div>
                   </td>
                   <td className="py-1 font-mono text-[10px] text-muted">
                     {r.lastActivityMinsAgo === null
@@ -120,7 +143,35 @@ export function MonitorCard({ compact = false }: { compact?: boolean }) {
           </tbody>
         </table>
       </div>
-      <div className="font-mono text-[9px] text-muted mt-1">15초마다 자동 갱신</div>
+      <div className="font-mono text-[9px] text-muted mt-2 text-right">15초마다 자동 갱신</div>
     </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  accent,
+  pulse,
+  muted,
+}: {
+  label: string;
+  value: number;
+  accent?: boolean;
+  pulse?: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="text-muted">{label}</span>
+      <span
+        className={`font-display font-extrabold ${
+          accent ? 'text-rust' : muted ? 'text-muted' : ''
+        } ${pulse && value > 0 ? 'animate-pulse' : ''}`}
+        style={{ fontSize: '13px' }}
+      >
+        {value}
+      </span>
+    </span>
   );
 }
