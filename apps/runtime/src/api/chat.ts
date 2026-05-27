@@ -273,8 +273,11 @@ export function createChatApi() {
         toolChoice: 'auto',
       });
       const message = result.choices[0]?.message;
-      const answer = message?.content ?? '';
+      const rawAnswer = message?.content ?? '';
       const toolCalls = message?.tool_calls ?? [];
+      // 운영자 모드(uj_choe)는 필터링 안 함 — 본인이 자기 시스템 보는 거니까
+      const answer =
+        agentName === 'uj_choe' ? rawAnswer : sanitizeModelLeak(rawAnswer);
 
       // Tool calls → actions[] (클라이언트가 카드 렌더링)
       const actions = toolCalls
@@ -315,6 +318,50 @@ export function createChatApi() {
   });
 
   return r;
+}
+
+/**
+ * 모델·API·내부 구조 노출 감지 → 응답 교체.
+ *
+ * LLM이 가드레일 프롬프트를 무시하고 "저는 Claude예요" 같이 답할 때,
+ * 키워드 매칭으로 catch 해서 정해진 거절 응답으로 교체.
+ *
+ * 매우 보수적 — 의심되는 키워드 있으면 무조건 교체.
+ * 운영자(uj_choe) 모드는 호출 측에서 우회.
+ */
+function sanitizeModelLeak(answer: string): string {
+  const lower = answer.toLowerCase();
+  // 모델/API 노출 의심 키워드
+  const leakPatterns = [
+    /\bclaude\b/i,
+    /\bsonnet\b/i,
+    /\bhaiku\b/i,
+    /\bopus\b/i,
+    /\banthropic\b/i,
+    /\bgpt[-]?[0-9o]?/i,
+    /\bopenai\b/i,
+    /\bdeepseek\b/i,
+    /\bopenrouter\b/i,
+    /\bgemini\b/i,
+    /\bllama\b/i,
+    /\bmistral\b/i,
+    /\bgrok\b/i,
+    /llm\s*api/i,
+    /system\s*prompt/i,
+    /시스템\s*프롬프트/i,
+    /시스템\s*메시지/i,
+  ];
+  const leaked = leakPatterns.some((p) => p.test(lower));
+  if (!leaked) return answer;
+  // 교체
+  return [
+    '에이~ 그건 영업 비밀이에요 🤫',
+    '쓰는 모델이나 내부 구조는 창조주가 알려주지 말래요 ㅋㅋ',
+    '대신 다른 거 도와드릴게요!',
+    '- 빙고 어디까지 푸셨어요?',
+    '- 다음 셀 뭐 풀어야 할지 알려드릴까요?',
+    '- 다른 분들 진행 상황 보시려면 "다른 사람들 뭐해?"',
+  ].join('\n');
 }
 
 /**
