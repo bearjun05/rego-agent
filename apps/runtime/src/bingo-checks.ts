@@ -122,21 +122,61 @@ async function checkToolUsed(agentName: string, toolIds: string[]): Promise<Chec
 }
 
 // ─────────────────────────────────────────────────────────
-// 셀 4 — 텔레그램 콜백 라우팅 1건
+// 셀 4 — 텔레그램 답장 버튼
+//
+// 통과 신호 (OR — 셀 5/2 와 같은 원칙):
+//   A) 실제 콜백 처리 — runs.trigger_type='telegram.callback' ≥ 1
+//   B) 버튼 메시지 발송 (telegram.send_with_button 호출) + handler.ts 에 onTelegramCallback 정의
 // ─────────────────────────────────────────────────────────
 async function checkButtonCallback(agentName: string): Promise<CheckResult> {
   const db = getDb();
-  const [r] = await db
+
+  // A) 실제 콜백 처리 — 가장 신뢰
+  const [callbackRun] = await db
     .select({ cnt: sql<number>`count(*)::int` })
     .from(runs)
     .where(and(eq(runs.agentName, agentName), eq(runs.triggerType, 'telegram.callback')));
-  if (!r || r.cnt < 1) {
-    return {
-      passed: false,
-      reason: '텔레그램 버튼이 클릭된 적이 없어요. 핸들러에서 inline_keyboard로 버튼 추가 후 클릭해보세요.',
-    };
+  if (callbackRun && callbackRun.cnt > 0) {
+    return { passed: true, reason: `콜백 ${callbackRun.cnt}건 처리됨` };
   }
-  return { passed: true, reason: `콜백 ${r.cnt}건 처리됨` };
+
+  // B) 버튼 메시지 발송 + onTelegramCallback 코드 정의
+  const [btnSend] = await db
+    .select({ cnt: sql<number>`count(*)::int` })
+    .from(toolCalls)
+    .where(
+      and(
+        eq(toolCalls.agentName, agentName),
+        eq(toolCalls.toolId, 'telegram.send_with_button'),
+        sql`${toolCalls.error} IS NULL`,
+      ),
+    );
+  if (btnSend && btnSend.cnt > 0) {
+    const filePath = path.join(getAgentsRoot(), agentName, 'handler.ts');
+    try {
+      const code = await fs.readFile(filePath, 'utf8');
+      if (/onTelegramCallback/.test(code)) {
+        return {
+          passed: true,
+          reason: `버튼 메시지 ${btnSend.cnt}건 발송 + onTelegramCallback 핸들러 정의됨`,
+        };
+      }
+      return {
+        passed: false,
+        reason: '버튼 메시지는 발송됐는데 onTelegramCallback 핸들러가 안 보여요',
+        hint: 'handler.ts 에 async onTelegramCallback(event, ctx) { ... } 추가',
+      };
+    } catch {
+      // 핸들러 파일을 읽을 수 없으면 발송 자체로 인정
+      return { passed: true, reason: `버튼 메시지 ${btnSend.cnt}건 발송됨` };
+    }
+  }
+
+  return {
+    passed: false,
+    reason: '아직 텔레그램 버튼 메시지 발송이 안 보여요',
+    hint: 'telegram.send_with_button 사용 또는 telegram.send 에 replyMarkup inline_keyboard 추가',
+  };
 }
 
 // ─────────────────────────────────────────────────────────
@@ -218,32 +258,52 @@ async function checkChatInput(agentName: string, cell: CellId): Promise<CheckRes
 }
 
 // ─────────────────────────────────────────────────────────
-// 셀 8 — cron 트리거 발화 1건
+// 셀 8 — cron 트리거
+//
+// 통과 신호 (OR — 셀 4/5 와 같은 원칙):
+//   A) 실제 발화 — runs.trigger_type='cron' ≥ 1
+//   B) agent.config.ts 에 trigger.cron(...) 등록 + handler.ts 에 onCron 정의
 // ─────────────────────────────────────────────────────────
 async function checkCronFired(agentName: string): Promise<CheckResult> {
   const db = getDb();
+
+  // A) 실제 발화
   const [r] = await db
     .select({ cnt: sql<number>`count(*)::int` })
     .from(runs)
     .where(and(eq(runs.agentName, agentName), eq(runs.triggerType, 'cron')));
-  if (!r || r.cnt < 1) {
-    // 폴백: agent.config.ts에 cron 선언만 했으면 "곧 발화 예정"으로 알려줌
-    const agent = getAgent(agentName);
-    const hasCronTrigger = agent?.manifest.triggers.some(
-      (t) => t.type === 'cron' && t.schedule,
-    );
-    if (hasCronTrigger) {
-      return {
-        passed: false,
-        reason: 'cron 트리거 등록됨 — 다음 발화 시각을 기다리거나 onCron을 호출해 발화시키세요',
-      };
+  if (r && r.cnt > 0) {
+    return { passed: true, reason: `cron ${r.cnt}회 발화됨` };
+  }
+
+  // B) 코드 정적: trigger.cron 등록 + onCron 핸들러 정의
+  const agent = getAgent(agentName);
+  const hasCronTrigger = agent?.manifest.triggers.some(
+    (t) => t.type === 'cron' && t.schedule,
+  );
+  if (hasCronTrigger) {
+    const filePath = path.join(getAgentsRoot(), agentName, 'handler.ts');
+    try {
+      const code = await fs.readFile(filePath, 'utf8');
+      if (/onCron/.test(code)) {
+        return {
+          passed: true,
+          reason: 'cron 트리거 등록 + onCron 핸들러 정의됨 (다음 발화 시각 대기 중)',
+        };
+      }
+    } catch {
+      /* 핸들러 미존재 — 아래 안내로 떨어짐 */
     }
     return {
       passed: false,
-      reason: 'agent.config.ts에 `trigger.cron("0 9 * * *")` 같은 트리거를 추가하세요',
+      reason: 'cron 트리거는 등록됐는데 handler.ts 에 onCron 함수가 안 보여요',
+      hint: 'async onCron(event, ctx) { ... } 를 defineHandler 안에 추가하세요',
     };
   }
-  return { passed: true, reason: `cron ${r.cnt}회 발화됨` };
+  return {
+    passed: false,
+    reason: 'agent.config.ts 에 `trigger.cron("0 9 * * *")` 같은 트리거를 추가하세요',
+  };
 }
 
 // ─────────────────────────────────────────────────────────

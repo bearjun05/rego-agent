@@ -37,27 +37,41 @@ export default defineHandler({
       }
     }
 
-    // 3) 분류
-    const { category, confidence } = await ctx.llm.classify({
-      text: event.text,
-      categories: [
-        { id: 'question', description: '답변이 필요한 질문' },
-        { id: 'request', description: '작업 요청' },
-        { id: 'schedule', description: '일정/회의 조율' },
-        { id: 'info', description: '정보 공유, 답변 필요 X' },
-      ],
-      prompt: classifyPrompt,
-    });
+    // 3) 분류 — LLM 실패해도 기본값으로 계속 진행
+    let category = 'info';
+    let confidence = 0;
+    try {
+      const classified = await ctx.llm.classify({
+        text: event.text,
+        categories: [
+          { id: 'question', description: '답변이 필요한 질문' },
+          { id: 'request', description: '작업 요청' },
+          { id: 'schedule', description: '일정/회의 조율' },
+          { id: 'info', description: '정보 공유, 답변 필요 X' },
+        ],
+        prompt: classifyPrompt,
+      });
+      category = classified.category;
+      confidence = classified.confidence;
+    } catch (e) {
+      ctx.logger.warn('LLM 분류 실패 → 기본값(info) 사용', { e });
+    }
 
-    // 4) 한 줄 요약 (스레드 맥락 있으면 포함)
+    // 4) 한 줄 요약 — LLM 실패 시 원문 앞부분으로 대체
     const summaryPrompt = threadContext
       ? `[스레드 맥락]\n${threadContext}\n\n[멘션 내용]\n${event.text}\n\n위를 바탕으로 핵심만 한 문장(30자 이내)으로 요약해. 존댓말 없이 간결하게.`
       : `다음 슬랙 메시지를 핵심만 담아 한 문장(30자 이내)으로 요약해. 존댓말 없이 간결하게.\n\n${event.text}`;
 
-    const { text: summary } = await ctx.llm.generate({
-      prompt: summaryPrompt,
-      maxTokens: 60,
-    });
+    let summary = event.text.slice(0, 30).trim();
+    try {
+      const { text: generated } = await ctx.llm.generate({
+        prompt: summaryPrompt,
+        maxTokens: 60,
+      });
+      summary = generated;
+    } catch (e) {
+      ctx.logger.warn('LLM 요약 실패 → 원문 앞부분 사용', { e });
+    }
 
     // 5) 텔레그램 버튼 메시지
     const categoryEmoji: Record<string, string> = {
@@ -83,13 +97,21 @@ export default defineHandler({
     if (threadContext) lines.push(``, `💬 스레드 맥락 포함하여 요약됨`);
     lines.push(``, `> ${event.text.slice(0, 200)}${event.text.length > 200 ? '…' : ''}`);
 
+    // telegram.send_with_button 실패 시 → telegram.send 로 fallback (알림 누락 방지)
+    // 주의: send_with_button은 런타임 DB 추적 대상이 아님(agent-runner는 telegram.send만 기록)
+    //       → fallback으로 send를 쓰면 대시보드에도 정상 집계됨
     await ctx.tools['telegram.send_with_button']!({
       text: lines.join('\n'),
       buttons: [
         // callbackData는 텔레그램 64바이트 제한 → permalink 대신 ts만 사용
         { text: '슬랙에서 답장하기 →', callbackData: event.ts },
       ],
-    }).catch((e) => ctx.logger.warn('텔레그램 전송 실패', { e }));
+    }).catch(async (e) => {
+      ctx.logger.warn('텔레그램 버튼 전송 실패 → plain send 재시도', { e });
+      await ctx.tools['telegram.send']!({
+        text: lines.join('\n'),
+      }).catch((e2) => ctx.logger.error('텔레그램 전송 최종 실패', { e2 }));
+    });
 
     return { category, confidence, summary: summary.trim() };
   },
