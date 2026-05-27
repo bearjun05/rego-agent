@@ -73,17 +73,6 @@ export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
-    // 0) 멘션 메시지에 👀 이모지 달기 (수신 확인용)
-    try {
-      await ctx.tools['slack.add_reaction']!({
-        channel: event.channel,
-        timestamp: event.ts,
-        emoji: 'eyes',
-      });
-    } catch (err) {
-      ctx.logger.warn('add_reaction 실패', { err: String(err) });
-    }
-
     // [빙고 5] 슬랙 ID → 이름·채널명 변환 (분류와 병렬 가능하지만 가독성 위해 순차)
     const { userLabel, channelLabel } = await resolveNames(event, ctx);
 
