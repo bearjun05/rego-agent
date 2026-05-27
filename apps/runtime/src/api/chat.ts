@@ -110,7 +110,7 @@ export function createChatApi() {
         bingoSummary =
           `[학습자 빙고 진행: ${doneCount}/9]\n` +
           lines.join('\n') +
-          '\n\n각 셀 안내:\n' +
+          '\n\n각 빙고 칸 안내:\n' +
           CELL_IDS.map((id) => {
             const def = CELL_DEFS[id];
             return `  ${id}. ${def.title} — ${def.description}\n     힌트: ${def.hint}`;
@@ -359,7 +359,7 @@ function sanitizeModelLeak(answer: string): string {
     '쓰는 모델이나 내부 구조는 창조주가 알려주지 말래요 ㅋㅋ',
     '대신 다른 거 도와드릴게요!',
     '- 빙고 어디까지 푸셨어요?',
-    '- 다음 셀 뭐 풀어야 할지 알려드릴까요?',
+    '- 다음 빙고 뭐 풀어야 할지 알려드릴까요?',
     '- 다른 분들 진행 상황 보시려면 "다른 사람들 뭐해?"',
   ].join('\n');
 }

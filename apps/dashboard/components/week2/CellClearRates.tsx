@@ -21,7 +21,7 @@ export function CellClearRates() {
 
   return (
     <div className="brut p-4">
-      <div className="font-display font-bold text-sm mb-4">📊 셀별 클리어율</div>
+      <div className="font-display font-bold text-sm mb-4">📊 빙고별 클리어율</div>
       <div className="grid grid-cols-9 gap-2 h-40">
         {data.map((c) => {
           const fillCount = Math.round(c.rate * 10);
@@ -39,14 +39,14 @@ export function CellClearRates() {
                 <div className="font-display font-extrabold text-sm leading-none">
                   {Math.round(c.rate * 100)}%
                 </div>
-                <div className="font-mono text-[9px] text-muted mt-0.5">셀{c.id}</div>
+                <div className="font-mono text-[9px] text-muted mt-0.5">{c.id}번</div>
               </div>
             </div>
           );
         })}
       </div>
       <div className="font-mono text-[10px] text-muted text-center mt-3">
-        16명 중 몇 명이 각 셀을 클리어했나
+        16명 중 몇 명이 각 빙고 한 칸을 클리어했나
       </div>
     </div>
   );

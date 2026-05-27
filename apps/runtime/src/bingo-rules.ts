@@ -23,7 +23,7 @@ export const CELL_DEFS: Record<CellId, CellDef> = {
     title: 'Slack 인증',
     short: 'Slack 연결',
     description: '대시보드에서 [내 Slack 연결] 버튼을 눌러 OAuth 인증을 완료하세요.',
-    hint: '인증 후 자동으로 빙고 셀이 채워져요. 본인 자리(slack_user_id)와 다른 계정으로 시도하면 거부됩니다.',
+    hint: '인증 후 자동으로 빙고 한 칸이 채워져요. 본인 자리(slack_user_id)와 다른 계정으로 시도하면 거부됩니다.',
     method: 'db',
   },
   2: {

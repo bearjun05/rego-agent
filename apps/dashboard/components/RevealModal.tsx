@@ -283,7 +283,7 @@ function NextStep() {
         <li className="brut p-3 bg-paper">
           <div className="font-display font-bold text-sm mb-1">🛠 3주차+ — 본인만의 사용 사례</div>
           <div className="text-sm text-muted">
-            본인이 평소 슬랙에서 답답했던 것 / 자동화하고 싶었던 것 — 셀 9에 적은 와우
+            본인이 평소 슬랙에서 답답했던 것 / 자동화하고 싶었던 것 — 9번 빙고에 적은 와우
             아이디어부터 시작.
           </div>
         </li>

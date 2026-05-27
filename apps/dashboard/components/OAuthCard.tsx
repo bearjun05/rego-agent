@@ -15,7 +15,7 @@ export function OAuthCard({ agentSlug, done }: { agentSlug: string; done?: boole
       <div className="font-mono text-[11px] text-muted mb-2 leading-relaxed">
         본인 슬랙 계정으로 OAuth 인증해주세요.
         <br />
-        새 탭에서 열리고, 끝나면 자동으로 빙고 셀이 채워져요.
+        새 탭에서 열리고, 끝나면 자동으로 빙고 한 칸이 채워져요.
       </div>
       <a
         href={`/oauth/slack?agent=${encodeURIComponent(agentSlug)}`}

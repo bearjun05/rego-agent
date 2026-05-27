@@ -141,7 +141,7 @@ function ThreePaneLayout() {
       </div>
       <aside className="lg:sticky lg:top-4 lg:self-start space-y-3">
         <div className="font-mono text-[10px] uppercase text-muted">INSPECTOR</div>
-        <InspectorBlock title="오늘의 미션" body="셀 3 — 이모지 자동 반응" tone="rust" />
+        <InspectorBlock title="오늘의 미션" body="3번 빙고 — 이모지 자동 반응" tone="rust" />
         <InspectorBlock title="진행률" body="6/9 — 한 발 남았어요" tone="green" />
         <InspectorBlock title="다음 깨알" body="텔레그램 버튼 콜백 만들어봐" tone="blue" />
         <div className="brut p-3 bg-paper">
@@ -217,17 +217,17 @@ function KanbanLayout() {
     {
       title: '이번 주 (TODO)',
       tone: 'var(--th-primary-1)',
-      cards: ['셀 3 — 이모지 자동 반응', '셀 5 — 텔레그램 버튼', '셀 7 — 자동 답장'],
+      cards: ['3번 빙고 — 이모지 자동 반응', '5번 빙고 — 텔레그램 버튼', '7번 빙고 — 자동 답장'],
     },
     {
       title: '진행 중 (DOING)',
       tone: 'var(--th-primary-2)',
-      cards: ['셀 6 — Claude 분류 시도 중', 'OAuth 토큰 갱신 (실패 1회)'],
+      cards: ['6번 빙고 — 시도 중 분류 시도 중', 'OAuth 토큰 갱신 (실패 1회)'],
     },
     {
       title: '완료 (DONE)',
       tone: 'var(--th-primary-4)',
-      cards: ['셀 1 — 슬랙 멘션 받기', '셀 2 — 텔레그램 알림', '셀 4 — 봇 토큰 등록'],
+      cards: ['1번 빙고 — 슬랙 멘션 받기', '2번 빙고 — 텔레그램 알림', '4번 빙고 — 봇 토큰 등록'],
     },
   ];
   return (
@@ -276,7 +276,7 @@ function FeedLayout() {
       <HomeChat />
       <FeedCard tone="var(--th-primary-1)" kind="MENTION" title="@수미 슬랙 멘션 도착" body="“이번 주차 자료 부탁드려요” — 분류: request" />
       <FeedCard tone="var(--th-primary-2)" kind="RUN" title="에이전트 실행 #42" body="cron 09:00 — 0.8s — ok" />
-      <FeedCard tone="var(--th-primary-3)" kind="LESSON" title="셀 4 — 텔레그램 버튼" body="callback_query 한 줄로 처리하는 법" />
+      <FeedCard tone="var(--th-primary-3)" kind="LESSON" title="4번 빙고 — 텔레그램 버튼" body="callback_query 한 줄로 처리하는 법" />
       <FeedCard tone="var(--th-primary-4)" kind="TODO" title="OAuth 재인증 필요" body="Slack 토큰 만료 D-2" />
     </div>
   );
@@ -523,7 +523,7 @@ function SecondaryFeed({ compact }: { compact?: boolean } = {}) {
         <li>· @수미 슬랙 멘션 처리 — 2분 전</li>
         <li>· @기철 cron 발화 — 5분 전</li>
         <li>· @웅준 코드 리로드 — 11분 전</li>
-        <li>· @지선 셀 5 클리어 — 18분 전</li>
+        <li>· @지선 5번 빙고 클리어 — 18분 전</li>
       </ul>
     </div>
   );

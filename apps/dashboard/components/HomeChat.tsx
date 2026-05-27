@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BingoBoard, type CellDef, type CellStatus } from './BingoBoard';
 import { BingoSidePanel } from './BingoSidePanel';
+import { CelebrationConfetti } from './CelebrationConfetti';
 import { OAuthCard } from './OAuthCard';
 import { ReloadButton } from './ReloadButton';
 import { MonitorCard } from './MonitorCard';
@@ -141,6 +142,8 @@ export function HomeChat() {
   const revealShownRef = useRef(false);
   /** 오른쪽 빙고 사이드 패널 표시 여부 */
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  /** 미션 완성 풀스크린 confetti 트리거 (verifyCell 성공 시 ++) */
+  const [celebFire, setCelebFire] = useState(0);
 
   const rosterRef = useRef<Person[]>([]);
   const sessionRef = useRef<string>('');
@@ -262,16 +265,16 @@ export function HomeChat() {
         } else if (data.type === 'tool.called') {
           const payload = data.payload as { toolId?: string } | undefined;
           if (payload?.toolId === 'slack.reactions_add') {
-            msg = '👀 이모지 자동 반응 호출됐어요! 셀 3 통과 ✓';
+            msg = '👀 이모지 자동 반응 호출됐어요! 3번 빙고 통과 ✓';
           } else if (payload?.toolId === 'telegram.edit_message') {
             msg = '✏️ 텔레그램 메시지 수정 호출 — 버튼 동작 잘 되고 있어요!';
           }
         } else if (data.type === 'run.finished') {
           const trigger = (data.payload as { triggerType?: string } | undefined)?.triggerType;
           if (trigger === 'telegram.callback') {
-            msg = '🎯 텔레그램 버튼 콜백 처리됨! 셀 4 통과 ✓';
+            msg = '🎯 텔레그램 버튼 콜백 처리됨! 4번 빙고 통과 ✓';
           } else if (trigger === 'cron') {
-            msg = '⏰ cron 트리거 발화 성공! 셀 8 통과 ✓';
+            msg = '⏰ cron 트리거 발화 성공! 8번 빙고 통과 ✓';
           }
         }
         if (msg) {
@@ -357,7 +360,7 @@ export function HomeChat() {
     const interval = setInterval(() => {
       const since = Date.now() - lastActivityRef.current;
       if (since > STUCK_AFTER_MS && !busy && !typing) {
-        insolMessage('혹시 어디서 막혔어요? 셀 클릭해서 안내문 다시 보거나, 어떤 부분이 헷갈리는지 적어주시면 도와드릴게요. 🐱');
+        insolMessage('혹시 어디서 막혔어요? 빙고 한 칸 클릭해서 안내문 다시 보거나, 어떤 부분이 헷갈리는지 적어주시면 도와드릴게요. 🐱');
         lastActivityRef.current = Date.now(); // 한 번 보내면 리셋
       }
     }, 60 * 1000); // 1분 단위 체크
@@ -412,9 +415,15 @@ export function HomeChat() {
       if (data.passed) {
         setMessages((m) => [
           ...m,
-          { role: 'assistant', content: `✅ ${cell.id}번 (${cell.title}) 통과! ${data.reason}` },
+          {
+            role: 'assistant',
+            content: `🎉 **${cell.id}번 빙고 완성!** ${cell.title} — 잘하셨어요!\n\n${data.reason}`,
+          },
         ]);
         setBingoRefreshKey((k) => k + 1);
+        setCelebFire((n) => n + 1); // 풀스크린 confetti 발동
+        // 사이드 패널 자동 열기 (안 열렸으면 — 빙고판 확인하도록)
+        setSidePanelOpen(true);
       } else {
         setMessages((m) => [
           ...m,
@@ -448,10 +457,15 @@ export function HomeChat() {
       if (data.passed) {
         setMessages((m) => [
           ...m,
-          { role: 'assistant', content: `🎉 ${cell.id}번 (${cell.title}) 저장됐어요!` },
+          {
+            role: 'assistant',
+            content: `🎉 **${cell.id}번 빙고 완성!** ${cell.title} — 잘하셨어요!`,
+          },
         ]);
         setBingoRefreshKey((k) => k + 1);
         setActiveMissionCell(null);
+        setCelebFire((n) => n + 1);
+        setSidePanelOpen(true);
       } else {
         setMessages((m) => [
           ...m,
@@ -693,6 +707,7 @@ export function HomeChat() {
 
   return (
     <>
+      <CelebrationConfetti trigger={celebFire} duration={2400} />
       {revealOpen && slug && (
         <RevealModal agentSlug={slug} onClose={() => setRevealOpen(false)} />
       )}
@@ -832,9 +847,9 @@ export function HomeChat() {
                     ) : (
                       <button
                         onClick={() => verifyCell(m.card && m.card.type === 'mission' ? m.card.cell : null)}
-                        className="btn btn-dark text-xs"
+                        className="btn btn-primary text-xs"
                       >
-                        검증하기 →
+                        🎯 미션 완성하기!
                       </button>
                     )}
                   </div>
