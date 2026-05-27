@@ -18,6 +18,8 @@ export default defineAgent({
   triggers: [
     // 본인 이름이 슬랙에서 태그될 때 동작
     trigger.slackMention(),
+    // [빙고 8] 매일 아침 9시(서버 TZ 기준) 어제의 멘션 브리핑
+    trigger.cron('0 9 * * *'),
   ],
 
   tools: [

@@ -6,6 +6,28 @@ import path from 'node:path';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const classifyPrompt = await readFile(path.join(here, 'prompts/classify.md'), 'utf8');
 const draftPrompt = await readFile(path.join(here, 'prompts/draft.md'), 'utf8');
+const morningBriefPrompt = await readFile(path.join(here, 'prompts/morning-brief.md'), 'utf8');
+
+interface MentionLog {
+  ts: string;
+  from: string;
+  channel: string;
+  category: string;
+  summary: string;
+}
+
+/** UTC Date → KST(UTC+9) 기준 YYYY-MM-DD */
+function kstDateStr(d: Date): string {
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+}
+
+async function appendDailyLog(ctx: AgentContext, entry: MentionLog): Promise<void> {
+  const key = `mentions:${kstDateStr(new Date())}`;
+  const prev = (await ctx.state.get<MentionLog[]>(key)) ?? [];
+  prev.push(entry);
+  await ctx.state.set(key, prev.slice(-50));
+}
 
 /** [빙고 5] 슬랙 ID(U.../C...)를 사람 이름·채널명으로 변환. 실패해도 event 값으로 폴백. */
 async function resolveNames(
@@ -124,6 +146,15 @@ export default defineHandler({
       },
     });
 
+    // [빙고 8] 아침 브리핑 재료로 누적 (KST 날짜 키)
+    await appendDailyLog(ctx, {
+      ts: event.ts,
+      from: userLabel,
+      channel: channelLabel,
+      category,
+      summary,
+    });
+
     // 답장 후보를 상태에 저장 (추후 슬랙 답장 자동화에 사용 가능)
     await ctx.state.set(`replies:${event.ts ?? Date.now()}`, {
       channel: event.channel,
@@ -156,5 +187,38 @@ export default defineHandler({
     });
 
     return { action, handled: true };
+  },
+
+  /**
+   * [빙고 8] 매일 아침 9시 — 어제(KST) 받은 멘션을 모아 텔레그램 브리핑.
+   * 누적된 게 없으면 가벼운 아침 인사만 보낸다.
+   */
+  async onCron(event, ctx) {
+    const fired = new Date(event.firedAt);
+    const yesterday = new Date(fired.getTime() - 24 * 60 * 60 * 1000);
+    const key = `mentions:${kstDateStr(yesterday)}`;
+    const logs = (await ctx.state.get<MentionLog[]>(key)) ?? [];
+
+    if (logs.length === 0) {
+      await ctx.tools['telegram.send']!({
+        text: '☀️ 좋은 아침! 어제 받은 멘션이 없었어요. 오늘도 화이팅 💪',
+      });
+      return { sent: true, count: 0 };
+    }
+
+    const listText = logs
+      .map((m, i) => `${i + 1}. [${m.category}] ${m.from}(#${m.channel}): ${m.summary}`)
+      .join('\n');
+    const brief = await ctx.llm.generate(
+      [morningBriefPrompt, '', '어제 받은 멘션:', listText].join('\n'),
+      { purpose: 'morning-brief', temperature: 0.4, maxTokens: 400 },
+    );
+
+    await ctx.tools['telegram.send']!({
+      text: `☀️ *어제의 슬랙 브리핑* (${kstDateStr(yesterday)})\n\n${brief.text.trim()}`,
+      parseMode: 'Markdown',
+    });
+
+    return { sent: true, count: logs.length };
   },
 });
