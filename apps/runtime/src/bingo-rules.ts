@@ -62,16 +62,18 @@ export const CELL_DEFS: Record<CellId, CellDef> = {
     id: 6,
     title: '이모지 BEST 5',
     short: '이모지 분석',
-    description: '본인이 슬랙에서 자주 쓴 이모지 BEST 5를 채팅창에 적어 주세요.',
-    hint: '"분석은 안 해도 되고, 그냥 5개만 적으셔도 OK"',
+    description:
+      'Slack API 를 연결했다는 건 슬랙에 있는 본인의 모든 대화를 AI로 분석해볼 수 있다는 뜻이에요. 아주 간단하게, 본인이 자주 쓴 이모지 BEST 5를 본인 에이전트한테 뽑아달라고 시켜보고, 그 결과를 채팅창에 적어 주세요.',
+    hint: '에이전트한테 시키는 게 핵심이지만, 손으로 5개만 적어도 일단 OK.',
     method: 'chat_input',
   },
   7: {
     id: 7,
     title: '태그 BEST 3',
     short: '태그 분석',
-    description: '본인과 슬랙 멘션을 많이 주고받은 사람 BEST 3를 채팅창에 적어 주세요.',
-    hint: '슬랙 검색에서 `from:me` 또는 `<@본인>`으로 살펴보세요.',
+    description:
+      '같은 방식이에요. 본인이 슬랙에서 가장 많이 멘션을 주고받은 사람 BEST 3 를 본인 에이전트한테 분석시켜 보고, 그 결과를 채팅창에 적어 주세요.',
+    hint: '본인 슬랙 DM/멘션 히스토리를 에이전트가 훑게 시키면 자동으로 나옵니다. 손으로 3명 적어도 OK.',
     method: 'chat_input',
   },
   8: {

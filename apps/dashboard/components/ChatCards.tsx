@@ -381,16 +381,16 @@ function CalloutCard({ data }: { data: CalloutData }) {
     <CardShell kind={`callout · ${data.tone ?? 'info'}`} tone={t.tone}>
       <div className="flex items-start gap-3">
         <div
-          className="font-display font-extrabold text-2xl shrink-0 leading-none"
+          className="font-display font-extrabold text-3xl shrink-0 leading-none"
           style={{ color: t.tone }}
           aria-hidden
         >
           {t.icon}
         </div>
         <div className="min-w-0">
-          {data.title && <div className="font-display font-bold text-sm mb-1">{data.title}</div>}
+          {data.title && <div className="font-display font-bold text-base mb-1.5">{data.title}</div>}
           {data.body && (
-            <div className="text-sm text-muted leading-relaxed">
+            <div className="text-[14px] leading-relaxed text-ink">
               <Markdown text={data.body} />
             </div>
           )}

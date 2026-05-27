@@ -783,21 +783,24 @@ export function HomeChat() {
                   />
                 )}
                 {m.card.type === 'mission' && (
-                  <div className="brut p-3 bg-paper">
+                  <div className="brut p-4 bg-paper">
                     <div className="font-mono text-[10px] uppercase tracking-widest text-muted">
                       Mission · {String(m.card.cell.id).padStart(2, '0')}
                     </div>
-                    <div className="font-display font-bold text-sm mb-2 leading-tight">
+                    <div className="font-display font-bold text-base mb-2.5 leading-tight">
                       {m.card.cell.title}
                     </div>
-                    <div className="text-xs leading-relaxed mb-2">
+                    <div className="text-[14px] leading-relaxed mb-3">
                       <Markdown text={m.card.cell.description} />
                     </div>
-                    <div className="font-mono text-[10px] text-muted bg-sand border-2 border-line p-2 mb-2">
+                    <div className="text-[13px] bg-sand border-2 border-line p-3 mb-3 leading-relaxed">
+                      <span className="font-mono text-[10px] uppercase tracking-widest text-muted block mb-1">
+                        Hint
+                      </span>
                       <Markdown text={m.card.cell.hint} />
                     </div>
                     {m.card.cell.method === 'chat_input' ? (
-                      <div className="font-mono text-[10px] text-muted">
+                      <div className="font-mono text-[11px] text-muted">
                         ↓ 아래 입력창에 답변을 적어주세요.
                       </div>
                     ) : (

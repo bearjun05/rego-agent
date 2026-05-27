@@ -1,7 +1,9 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { getDb, agents, slackUserTokens } from '@rego/db';
-import { agentFolderExists } from './git-sync.js';
+import { getAgentsRoot } from './agent-registry.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('learner-status');
@@ -24,13 +26,17 @@ export interface LearnerPrereqs {
 let _branchCache: { at: number; branches: Set<string> } | null = null;
 const BRANCH_CACHE_TTL_MS = 5 * 60 * 1000;
 
+function repoRoot(): string {
+  return path.resolve(getAgentsRoot(), '..');
+}
+
 async function listLearnerBranches(): Promise<Set<string>> {
   if (_branchCache && Date.now() - _branchCache.at < BRANCH_CACHE_TTL_MS) {
     return _branchCache.branches;
   }
   try {
     const { stdout } = await execAsync('git ls-remote origin "refs/heads/learner/*"', {
-      cwd: process.cwd(),
+      cwd: repoRoot(),
     });
     const branches = new Set<string>();
     for (const line of stdout.split('\n')) {
@@ -64,24 +70,31 @@ export async function loadAllPrereqs(): Promise<Record<string, LearnerPrereqs>> 
     })
     .from(agents);
 
-  const tokens = await db
-    .select({
-      slackUserId: slackUserTokens.slackUserId,
-      revoked: slackUserTokens.revoked,
-    })
-    .from(slackUserTokens);
-  const validSlackIds = new Set(
-    tokens.filter((t) => !t.revoked).map((t) => t.slackUserId),
-  );
+  // slack_user_tokens 테이블 누락 환경(마이그레이션 안 된 자체호스팅)에서도 살아남게.
+  let validSlackIds = new Set<string>();
+  try {
+    const tokens = await db
+      .select({
+        slackUserId: slackUserTokens.slackUserId,
+        revoked: slackUserTokens.revoked,
+      })
+      .from(slackUserTokens);
+    validSlackIds = new Set(
+      tokens.filter((t) => !t.revoked).map((t) => t.slackUserId),
+    );
+  } catch (err) {
+    log.warn('slack_user_tokens query failed (마이그레이션 필요?) — slackOk는 폴백', err);
+  }
 
   const branches = await listLearnerBranches();
 
+  const agentsRoot = getAgentsRoot();
   const result: Record<string, LearnerPrereqs> = {};
   for (const a of allAgents) {
     if (a.slug === '_template') continue;
     result[a.slug] = {
       slug: a.slug,
-      folderOk: agentFolderExists(a.slug),
+      folderOk: existsSync(path.join(agentsRoot, a.slug)),
       branchOk: branches.has(a.slug),
       slackOk: !!(a.slackUserId && validSlackIds.has(a.slackUserId)),
       telegramOk: !!a.telegramChatId,
