@@ -1,11 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { eq, sql, and, isNotNull, or, like } from 'drizzle-orm';
+import { eq, sql, and, or } from 'drizzle-orm';
 import {
   getDb,
   agents,
   slackUserTokens,
-  telegramMessages,
   toolCalls,
   runs,
   kvState,
@@ -71,26 +70,30 @@ async function checkOAuth(agentName: string): Promise<CheckResult> {
 }
 
 // ─────────────────────────────────────────────────────────
-// 셀 2 — 슬랙 멘션 → 텔레그램 도착
+// 셀 2 — 텔레그램으로 메시지 한 번이라도 발송됐는지 (어떤 도구든, 어떤 트리거든).
+//
+// 의도: "본인 텔레그램에 진짜로 메시지가 갔다" 가 통과 신호. 도구 종류(send/send_with_button)나
+//       매핑 테이블(telegram_messages)에 묶이지 않고 tool_calls 의 성공 호출만 본다.
 // ─────────────────────────────────────────────────────────
 async function checkFirstMentionToTelegram(agentName: string): Promise<CheckResult> {
   const db = getDb();
   const [r] = await db
     .select({ cnt: sql<number>`count(*)::int` })
-    .from(telegramMessages)
+    .from(toolCalls)
     .where(
       and(
-        eq(telegramMessages.agentName, agentName),
-        isNotNull(telegramMessages.triggeredBySlackMentionId),
+        eq(toolCalls.agentName, agentName),
+        sql`${toolCalls.toolId} LIKE 'telegram.send%'`,
+        sql`${toolCalls.error} IS NULL`,
       ),
     );
   if (!r || r.cnt < 1) {
     return {
       passed: false,
-      reason: '아직 본인 멘션 → 텔레그램 전송 기록이 없어요. 슬랙에서 본인을 멘션해보세요.',
+      reason: '아직 텔레그램으로 메시지를 보낸 기록이 없어요. 본인 슬랙에서 본인을 멘션해보세요.',
     };
   }
-  return { passed: true, reason: `${r.cnt}건 도착함` };
+  return { passed: true, reason: `텔레그램 ${r.cnt}건 전송됨` };
 }
 
 // ─────────────────────────────────────────────────────────

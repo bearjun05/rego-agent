@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, and, sql as drizzleSql } from 'drizzle-orm';
+import { eq, and, inArray, sql as drizzleSql } from 'drizzle-orm';
 import {
   getDb,
   runs,
@@ -502,12 +502,17 @@ export async function runAgentForEvent(
     })
     .where(eq(runs.id, runId));
 
-  // 텔레그램 전송 추적: tool_calls 중 telegram.send 가 있으면 매핑 기록
+  // 텔레그램 전송 추적: tool_calls 의 telegram 발송 도구(send / send_with_button) 모두 잡아 매핑 기록
   if (options.sourceSlackMentionId !== undefined) {
     const sentMessages = await db
       .select()
       .from(toolCalls)
-      .where(and(eq(toolCalls.runId, runId), eq(toolCalls.toolId, 'telegram.send')));
+      .where(
+        and(
+          eq(toolCalls.runId, runId),
+          inArray(toolCalls.toolId, ['telegram.send', 'telegram.send_with_button']),
+        ),
+      );
     for (const tc of sentMessages) {
       const out = tc.output as { messageId?: number } | null;
       const input = tc.input as { text?: string; chatId?: string } | null;
