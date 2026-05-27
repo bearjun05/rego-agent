@@ -4,14 +4,14 @@ export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
-    // 빙고 3: 👀 이모지 반응 (수신 확인 즉시 표시, 실패 시 무시)
-    try {
-      await ctx.tools['slack.reactions_add']!({
-        channel: event.channel,
-        ts: event.ts,
-        name: 'eyes',
-      });
-    } catch { /* 스모크/가짜 채널 등 실패 시 무시 */ }
+    // 빙고 3: 👀 이모지 반응 — 임시 비활성화
+    // try {
+    //   await ctx.tools['slack.reactions_add']!({
+    //     channel: event.channel,
+    //     ts: event.ts,
+    //     name: 'eyes',
+    //   });
+    // } catch { /* 스모크/가짜 채널 등 실패 시 무시 */ }
 
     // 1. 텔레그램 알림 먼저 (다른 단계 실패 여부와 무관하게 보장)
     // 빙고 5: 슬랙 API로 실제 이름 조회 (실패 시 기존 값 폴백)
