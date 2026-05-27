@@ -66,12 +66,6 @@ export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
-    await ctx.tools['slack.reactions_add']!({
-      channel: event.channel,
-      ts: event.ts,
-      name: 'eyes',
-    });
-
     if (/이모지|emoji/i.test(event.text)) {
       ctx.logger.info('이모지 분석 키워드 감지 → BEST 5 분석');
       return analyzeEmojiTop5(ctx);
