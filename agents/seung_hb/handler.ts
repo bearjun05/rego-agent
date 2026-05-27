@@ -8,8 +8,8 @@ export default defineHandler({
 
     await ctx.tools['slack.add_reaction']!({
       channel: event.channel,
-      ts: event.ts,
-      name: 'eyes',
+      timestamp: event.ts,
+      emoji: 'eyes',
     }).catch((err: unknown) => {
       ctx.logger.warn('add_reaction 실패', { error: String(err) });
     });
