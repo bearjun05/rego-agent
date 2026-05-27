@@ -18,6 +18,8 @@ export default defineAgent({
   triggers: [
     // 본인 이름이 슬랙에서 태그될 때 동작
     trigger.slackMention(),
+    // 매일 아침 9시 (Asia/Seoul)
+    trigger.cron('0 9 * * *'),
   ],
 
   tools: ['telegram.send', 'telegram.send_with_button'],

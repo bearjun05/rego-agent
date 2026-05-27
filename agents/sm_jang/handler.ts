@@ -189,4 +189,13 @@ export default defineHandler({
   async onManual(_event, ctx) {
     return analyzeEmojiTop5(ctx);
   },
+
+  async onCron(event, ctx) {
+    ctx.logger.info('cron 발화', { schedule: event.schedule });
+    await ctx.tools['telegram.send']!({
+      text: `☀️ *좋은 아침이에요, 장수미님!*\n\n오늘도 화이팅 💪\n_(매일 09:00 KST 자동 발화)_`,
+      parseMode: 'Markdown',
+    });
+    return { schedule: event.schedule };
+  },
 });
