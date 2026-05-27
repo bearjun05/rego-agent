@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { BingoBoard, type CellDef, type CellStatus } from './BingoBoard';
+import { BingoSidePanel } from './BingoSidePanel';
 import { OAuthCard } from './OAuthCard';
 import { ReloadButton } from './ReloadButton';
 import { MonitorCard } from './MonitorCard';
@@ -16,7 +17,8 @@ type CardData =
   | { type: 'mission'; cell: CellDef }
   | { type: 'reload'; agentSlug: string }
   | { type: 'monitor' }
-  | { type: 'theme-picker'; themeIds: string[]; reason: string };
+  | { type: 'theme-picker'; themeIds: string[]; reason: string }
+  | { type: 'open-bingo-panel' }; // 사이드 패널 열기 버튼 카드
 
 interface Message {
   role: 'user' | 'assistant';
@@ -115,6 +117,8 @@ export function HomeChat() {
   /** 빙고 6+ 리빌 모달 (한 번만) */
   const [revealOpen, setRevealOpen] = useState(false);
   const revealShownRef = useRef(false);
+  /** 오른쪽 빙고 사이드 패널 표시 여부 */
+  const [sidePanelOpen, setSidePanelOpen] = useState(false);
 
   const rosterRef = useRef<Person[]>([]);
   const sessionRef = useRef<string>('');
@@ -173,12 +177,9 @@ export function HomeChat() {
           sessionRef.current = p.slug ? `user-${p.slug}` : localStorage.getItem(SESSION_KEY) ?? `anon-${Date.now()}`;
           await loadHistory(sessionRef.current);
           await typeOut([`다시 왔네요, ${p.given}님! 👋`, '오늘 막힌 거 있으면 바로 물어봐요.']);
-          // 학습자 slug가 있으면 빙고판 카드 자동 표시 (재진입)
+          // 학습자 slug가 있으면 사이드 패널 자동 열기 (재진입)
           if (p.slug) {
-            setMessages((m) => [
-              ...m,
-              { role: 'assistant', content: '', card: { type: 'bingo', agentSlug: p.slug! } },
-            ]);
+            setSidePanelOpen(true);
           }
           setBusy(false);
           return;
@@ -529,15 +530,22 @@ export function HomeChat() {
       if (!s) localStorage.setItem(SESSION_KEY, sid);
       localStorage.setItem(PROFILE_KEY, JSON.stringify({ slug: s, given: g, full: person?.displayName ?? cleaned }));
 
-      // 입력한 이름을 첫 메시지로 보내면 코치(LLM)가 환영 + 오늘 미션 + /start 안내를 생성
-      await askCoach(cleaned, sid, s, g);
-
-      // 매칭된 학습자면 빙고판 자동 표시
+      // 매칭된 학습자 — 고정 스크립트로 환영 (LLM 응답 일관성 위해)
       if (s) {
+        await typeOut([
+          `안녕하세요 ${g}님! 👋`,
+          '오늘은 **2주차**예요. 저번 주에 했던 거 이어서 진행할 건데, 오늘은 실제로 슬랙과 연결해서 멘션이 오면 텔레그램으로 받아볼 거예요.',
+          '그 메시지를 좀 더 예쁘게 가공하거나 여러 기능을 붙여서 — 실제로 내가 쓰는데 도움 되는 에이전트로 만들어보는 게 목표!',
+          `${g}님이 조금 더 재밌게 해볼 수 있게 **빙고**를 가지고 와봤어요. 순서는 자유! **3빙고**를 먼저 완성해보세요. 🎯`,
+        ]);
+        // 빙고판 열기 버튼 카드
         setMessages((m) => [
           ...m,
-          { role: 'assistant', content: '', card: { type: 'bingo', agentSlug: s } },
+          { role: 'assistant', content: '', card: { type: 'open-bingo-panel' } },
         ]);
+      } else {
+        // 매칭 안 됨 → LLM에 자유 응답 요청
+        await askCoach(cleaned, sid, s, g);
       }
       return;
     }
@@ -592,7 +600,12 @@ export function HomeChat() {
       {revealOpen && slug && (
         <RevealModal agentSlug={slug} onClose={() => setRevealOpen(false)} />
       )}
-    <div className="brut bg-paper flex flex-col h-[68vh] min-h-[460px] max-h-[720px]">
+    <div
+      className={`grid gap-4 h-[68vh] min-h-[460px] max-h-[720px] transition-[grid-template-columns] duration-300 ${
+        sidePanelOpen && slug ? 'grid-cols-1 lg:grid-cols-[2fr_1fr]' : 'grid-cols-1'
+      }`}
+    >
+    <div className="brut bg-paper flex flex-col h-full overflow-hidden">
       <div className="border-b-2 border-ink p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl leading-none">🐱</span>
@@ -690,6 +703,26 @@ export function HomeChat() {
                 {m.card.type === 'theme-picker' && (
                   <ThemePicker themeIds={m.card.themeIds} reason={m.card.reason} />
                 )}
+                {m.card.type === 'open-bingo-panel' && (
+                  <button
+                    onClick={() => setSidePanelOpen(true)}
+                    className="brut p-3 bg-paper text-left hover:bg-sand transition-colors group w-full"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="font-display font-bold text-sm mb-0.5">
+                          🧱 빙고판 열어보기
+                        </div>
+                        <div className="font-mono text-[10px] text-muted">
+                          오른쪽에 9칸 빙고 + 실시간 16명 순위가 떠요
+                        </div>
+                      </div>
+                      <span className="font-display font-extrabold text-2xl text-rust group-hover:translate-x-1 transition-transform">
+                        →
+                      </span>
+                    </div>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -744,6 +777,27 @@ export function HomeChat() {
           전송
         </button>
       </form>
+    </div>
+    {/* 오른쪽 사이드 패널 — 빙고판 + 미니 순위판 */}
+    {sidePanelOpen && slug && (
+      <div className="hidden lg:block h-full overflow-y-auto">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-mono text-[10px] uppercase text-muted">사이드 패널</span>
+          <button
+            onClick={() => setSidePanelOpen(false)}
+            className="font-mono text-[10px] text-muted hover:text-ink"
+            title="패널 접기"
+          >
+            ✕ 접기
+          </button>
+        </div>
+        <BingoSidePanel
+          agentSlug={slug}
+          refreshKey={bingoRefreshKey}
+          onCellExplain={handleBingoCellClick}
+        />
+      </div>
+    )}
     </div>
     </>
   );
