@@ -41,11 +41,17 @@ export default defineHandler({
 
     const [c1, c2] = candidates;
 
+    const looksLikeSlackUserId = (s?: string) => !!s && /^U[A-Z0-9]{6,}$/.test(s);
+    const looksLikeSlackChannelId = (s?: string) => !!s && /^[CGD][A-Z0-9]{6,}$/.test(s);
+
     let fromName = event.userName;
-    if (!fromName && event.user) {
+    if ((!fromName || looksLikeSlackUserId(fromName)) && event.user) {
       try {
         const u = await ctx.tools['slack.users_info']!({ user: event.user });
-        fromName = u.display_name || u.real_name || u.name || event.user;
+        const resolved = u.display_name || u.real_name || u.name;
+        ctx.logger.info('users_info 결과', { user: event.user, resolved, raw: u });
+        if (resolved) fromName = resolved;
+        else fromName = event.user;
       } catch (err) {
         ctx.logger.warn('users_info 실패', { user: event.user, err: String(err) });
         fromName = event.user;
@@ -53,10 +59,12 @@ export default defineHandler({
     }
 
     let chName = event.channelName;
-    if (!chName && event.channel) {
+    if ((!chName || looksLikeSlackChannelId(chName)) && event.channel) {
       try {
         const c = await ctx.tools['slack.conversations_info']!({ channel: event.channel });
-        chName = c.name || event.channel;
+        ctx.logger.info('conversations_info 결과', { channel: event.channel, name: c.name });
+        if (c.name) chName = c.name;
+        else chName = event.channel;
       } catch (err) {
         ctx.logger.warn('conversations_info 실패', { channel: event.channel, err: String(err) });
         chName = event.channel;
