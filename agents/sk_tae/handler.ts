@@ -22,8 +22,37 @@ export default defineHandler({
       ctx.logger.warn('eyes 반응 추가 실패', { err: String(err) });
     }
 
+    // 본문에 박힌 슬랙 토큰(<@U123>, <#C123|name>, <!here>)을 사람이 읽을 이름으로 변환.
+    // 요약 "전"에 변환해야 LLM 요약문에도 ID 대신 이름이 들어간다.
+    const resolveRefs = async (raw: string): Promise<string> => {
+      // 1) 유저 멘션: <@U123> 또는 <@U123|handle> → @이름 (중복 ID는 한 번만 조회)
+      const ids = new Set<string>();
+      for (const m of raw.matchAll(/<@([UW][A-Z0-9]+)(?:\|[^>]+)?>/g)) ids.add(m[1]);
+      const nameById = new Map<string, string>();
+      for (const id of ids) {
+        try {
+          const u = await ctx.tools['slack.users_info']!({ user: id });
+          nameById.set(id, u.real_name ?? u.display_name ?? u.name ?? id);
+        } catch (err) {
+          ctx.logger.warn('본문 멘션 users_info 실패 — 토큰 값 폴백', { id, err: String(err) });
+        }
+      }
+      return raw
+        .replace(
+          /<@([UW][A-Z0-9]+)(?:\|([^>]+))?>/g,
+          (_f, id, handle) => `@${nameById.get(id) ?? handle ?? id}`,
+        )
+        // 2) 채널 멘션: <#C123|name> → #name (이름이 토큰에 박혀 있으면 그대로 사용)
+        .replace(/<#[A-Z0-9]+\|([^>]+)>/g, (_f, name) => `#${name}`)
+        .replace(/<#([A-Z0-9]+)>/g, (_f, id) => `#${id}`)
+        // 3) 특수 멘션: <!here>, <!channel>, <!subteam^...|@팀> 등
+        .replace(/<!(\w+)(?:\^[A-Z0-9]+)?(?:\|([^>]+))?>/g, (_f, kw, label) => label ?? `@${kw}`);
+    };
+
+    const resolvedText = await resolveRefs(event.text);
+
     const { text: summary } = await ctx.llm.generate(
-      `${summarizePrompt}\n\n---\n슬랙 메시지:\n${event.text}`,
+      `${summarizePrompt}\n\n---\n슬랙 메시지:\n${resolvedText}`,
     );
 
     // 텔레그램 보내기 전에 슬랙 API로 사람 이름·채널명 보강.
