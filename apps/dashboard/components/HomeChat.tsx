@@ -107,9 +107,10 @@ export function HomeChat() {
   const stuckSentRef = useRef(false);
 
   useEffect(() => {
-    // 페이지 전체 스크롤로 마지막 메시지가 보이게 — 채팅 박스 내부 스크롤 X
-    requestAnimationFrame(() => {
-      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    // 채팅 박스 내부만 스크롤 — 페이지 전체 강제 스크롤은 사용자 시선을 빼앗아서 X
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: 'smooth',
     });
   }, [messages, typing]);
 
@@ -293,6 +294,8 @@ export function HomeChat() {
         let msg: string | null = null;
         let cardAfter: CardData | null = null;
         if (data.type === 'slack.mention.received') {
+          // agentName 없는(broadcast) 이벤트는 무시 — 다른 학습자 멘션이 본인 채팅창에 뜨지 않게.
+          if (!data.agentName) return;
           msg = '🔔 슬랙 멘션 들어왔어요! 1분 안에 텔레그램 도착하는지 봐요.';
         } else if (data.type === 'agent.reloaded') {
           const sha = (data.payload as { sha?: string } | undefined)?.sha?.slice(0, 8);

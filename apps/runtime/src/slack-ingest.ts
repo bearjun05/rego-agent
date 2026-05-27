@@ -68,21 +68,24 @@ export async function ingestSlackMention(
     return { ingested: false, matched: 0 };
   }
 
-  await bus.publish({
-    type: 'slack.mention.received',
-    payload: {
-      mentionId,
-      source: opts.source,
-      text: event.text,
-      channelName: event.channelName,
-      userName: event.userName,
-    },
-  });
-
   const matched = matchAgentsForEvent(event, true, opts.restrictToSlackUserId);
   log.info(`mention ${key} matched ${matched.length} agents (source=${opts.source})`);
 
+  // ★ SSE 이벤트는 매칭된 학습자 각각에 personalized 발행.
+  // 예전엔 broadcast(agentName 없음)였는데 모든 학습자가 "🔔 멘션 들어왔어요"를 받는 문제 발생.
+  // 본인이 슬랙에서 멘션 받았을 때만 본인 채팅창에 알림이 떠야 함.
   for (const agent of matched) {
+    await bus.publish({
+      type: 'slack.mention.received',
+      agentName: agent.name,
+      payload: {
+        mentionId,
+        source: opts.source,
+        text: event.text,
+        channelName: event.channelName,
+        userName: event.userName,
+      },
+    });
     runAgentForEvent(agent, event, {
       sourceSlackMentionId: mentionId,
       triggeredBy: 'real',
