@@ -21,7 +21,8 @@ async function resolveNames(
       real_name?: string;
       display_name?: string;
     };
-    userLabel = u.display_name || u.real_name || u.name || userLabel;
+    userLabel = u.real_name || u.display_name || u.name || userLabel;
+    ctx.logger.info('users_info 결과', { id: event.user, picked: userLabel, raw: u });
   } catch (err) {
     ctx.logger.warn('slack.users_info 실패 — event 값으로 폴백', { err: String(err) });
   }
@@ -31,6 +32,7 @@ async function resolveNames(
       name?: string;
     };
     channelLabel = c.name || channelLabel;
+    ctx.logger.info('conversations_info 결과', { id: event.channel, picked: channelLabel, raw: c });
   } catch (err) {
     ctx.logger.warn('slack.conversations_info 실패 — event 값으로 폴백', { err: String(err) });
   }
