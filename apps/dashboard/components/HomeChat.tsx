@@ -32,6 +32,8 @@ interface Person {
 
 const SESSION_KEY = 'rego-chat-session';
 const PROFILE_KEY = 'rego-user-profile'; // { slug, given, full }
+const VERSION_KEY = 'rego-chat-version';
+const APP_VERSION = 'v2-2026-05-27-week2'; // 흐름 변경 시 올리기 → 옛 localStorage 자동 청소
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const typingDelay = (text: string) => Math.min(500 + text.length * 38, 2100);
@@ -155,6 +157,17 @@ export function HomeChat() {
     startedRef.current = true;
 
     (async () => {
+      // 버전 마이그레이션 — 흐름이 바뀌었으면 옛 프로필 청소
+      try {
+        const savedVer = localStorage.getItem(VERSION_KEY);
+        if (savedVer !== APP_VERSION) {
+          // 옛 버전 → PROFILE_KEY/SESSION_KEY 청소 (재진입자 새 흐름 강제)
+          localStorage.removeItem(PROFILE_KEY);
+          localStorage.removeItem(SESSION_KEY);
+          localStorage.setItem(VERSION_KEY, APP_VERSION);
+        }
+      } catch {}
+
       // roster (하드코딩된 사용자 목록) 로드
       try {
         const res = await fetch('/api/runtime/agents');
@@ -166,7 +179,7 @@ export function HomeChat() {
         /* ignore — 매칭 없이 진행 */
       }
 
-      // 이전 방문 프로필 있으면 바로 채팅 모드
+      // 이전 방문 프로필 있으면 새 인사 흐름으로 (옛 "다시 왔네요" 제거)
       const saved = typeof window !== 'undefined' ? localStorage.getItem(PROFILE_KEY) : null;
       if (saved) {
         try {
@@ -176,10 +189,22 @@ export function HomeChat() {
           setStage('chatting');
           sessionRef.current = p.slug ? `user-${p.slug}` : localStorage.getItem(SESSION_KEY) ?? `anon-${Date.now()}`;
           await loadHistory(sessionRef.current);
-          await typeOut([`다시 왔네요, ${p.given}님! 👋`, '오늘 막힌 거 있으면 바로 물어봐요.']);
-          // 학습자 slug가 있으면 사이드 패널 자동 열기 (재진입)
+
           if (p.slug) {
-            setSidePanelOpen(true);
+            // 매칭된 학습자 — 첫 진입과 동일한 4줄 인사 (일관성)
+            await typeOut([
+              `다시 왔네요, ${p.given}님! 👋`,
+              '오늘은 **2주차** — 저번 주 이어서 슬랙 멘션을 텔레그램으로 받고, 메시지를 예쁘게 가공하는 게 목표예요.',
+              '오른쪽에 빙고판 + 실시간 순위 띄워둘게요. 막히는 거 있으면 바로 물어봐요!',
+            ]);
+            setMessages((m) => [
+              ...m,
+              { role: 'assistant', content: '', card: { type: 'open-bingo-panel' } },
+            ]);
+            setSidePanelOpen(true); // 자동 열기
+          } else {
+            // 매칭 안 된 익명 — 짧은 인사
+            await typeOut([`다시 왔네요, ${p.given}님! 👋`, '오늘 막힌 거 있으면 바로 물어봐요.']);
           }
           setBusy(false);
           return;
@@ -631,9 +656,24 @@ export function HomeChat() {
             <span className="font-mono text-[10px] text-muted">{doneCount}/9</span>
           </div>
         )}
-        <span className="font-mono text-[10px] uppercase text-muted hidden sm:block">
-          {weekLabelEn()} · ONBOARDING
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase text-muted hidden sm:block">
+            {weekLabelEn()} · ONBOARDING
+          </span>
+          <button
+            onClick={() => {
+              try {
+                localStorage.removeItem(PROFILE_KEY);
+                localStorage.removeItem(SESSION_KEY);
+              } catch {}
+              window.location.reload();
+            }}
+            className="font-mono text-[9px] text-muted hover:text-rust"
+            title="세션 리셋 — 이름부터 다시 시작"
+          >
+            ↺ 초기화
+          </button>
+        </div>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
