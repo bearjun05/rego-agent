@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { eq, desc, sql } from 'drizzle-orm';
 import { getDb, kvState, agents, runs, telegramMessages } from '@rego/db';
 import { CELL_DEFS, CELL_IDS, CHAT_INPUT_CELLS, type CellId } from '../bingo-rules.js';
-import { checkAllCells, checkCell } from '../bingo-checks.js';
+import { checkAllCells, checkCell, recordBingoClaim } from '../bingo-checks.js';
 import { createLogger } from '../logger.js';
 
 const log = createLogger('api:bingo');
@@ -32,6 +32,10 @@ export function createBingoApi() {
       return c.json({ error: 'agent + cell(1~9) 필요' }, 400);
     }
     const result = await checkCell(cell, agent);
+    // 통과 시 claim 기록 — 본인이 verify 버튼 눌렀을 때만 done 으로 인정되는 흐름.
+    if (result.passed) {
+      await recordBingoClaim(agent, cell, result.reason);
+    }
     return c.json({ ...result, cell, def: CELL_DEFS[cell] });
   });
 
@@ -64,6 +68,8 @@ export function createBingoApi() {
         target: [kvState.agentName, kvState.key],
         set: { value, updatedAt: new Date() },
       });
+    // chat_input 셀도 본인이 직접 입력한 거니까 claim 기록 (= done 으로 인정)
+    await recordBingoClaim(agent, cell, '채팅 입력으로 클레임');
     log.info(`bingo claim: ${agent} cell ${cell}`);
     return c.json({ passed: true, reason: '저장됨' });
   });

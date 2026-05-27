@@ -9,6 +9,7 @@ import {
   toolCalls,
   runs,
   kvState,
+  bingoClaims,
 } from '@rego/db';
 import { createLogger } from './logger.js';
 import { CHAT_INPUT_CELLS, type CellId, type CellStatus } from './bingo-rules.js';
@@ -220,20 +221,42 @@ async function checkCronFired(agentName: string): Promise<CheckResult> {
 }
 
 // ─────────────────────────────────────────────────────────
-// 9칸 일괄 체크 (status API용)
+// 9칸 일괄 체크 (status API용).
+//
+// 정책: 자동 검증이 통과해도 본인이 verify 버튼을 눌러 bingo_claims 에
+// 행이 들어가야만 done. 본인이 직접 풀어보고 검증받는 흐름을 강제.
+// chat_input 셀(6/7/9)도 동일 — 입력 → claim insert 가 같이 일어남.
 // ─────────────────────────────────────────────────────────
 export async function checkAllCells(
   agentName: string,
 ): Promise<Record<CellId, CellStatus>> {
+  const db = getDb();
+  const claims = await db
+    .select({ cellId: bingoClaims.cellId })
+    .from(bingoClaims)
+    .where(eq(bingoClaims.agentName, agentName));
+  const claimed = new Set(claims.map((c) => c.cellId as CellId));
+
   const result = {} as Record<CellId, CellStatus>;
   for (const cell of [1, 2, 3, 4, 5, 6, 7, 8, 9] as CellId[]) {
-    try {
-      const r = await checkCell(cell, agentName);
-      result[cell] = r.passed ? 'done' : 'pending';
-    } catch (err) {
-      log.warn(`cell ${cell} check failed for ${agentName}`, err);
-      result[cell] = 'pending';
-    }
+    result[cell] = claimed.has(cell) ? 'done' : 'pending';
   }
   return result;
+}
+
+/** 자동 검증 통과 시 호출 — 한 번만 insert, 중복은 무시. */
+export async function recordBingoClaim(
+  agentName: string,
+  cell: CellId,
+  reason?: string,
+): Promise<void> {
+  const db = getDb();
+  try {
+    await db
+      .insert(bingoClaims)
+      .values({ agentName, cellId: cell, reason: reason ?? null })
+      .onConflictDoNothing();
+  } catch (err) {
+    log.warn(`bingo claim insert failed agent=${agentName} cell=${cell}`, err);
+  }
 }

@@ -63,13 +63,17 @@ export function createWeek2Api() {
     return c.json({ tools: totals });
   });
 
-  /** 텔레그램 메시지 갤러리 — 각 학습자 최근 메시지 1건 (PII 마스킹) */
+  /**
+   * 텔레그램 갤러리 — 학습자별 최근 메시지들 + 규칙 기반 추출 "기능 태그".
+   * 비개발자가 한눈에 "이 사람 메시지에 어떤 기능이 들어있나" 보는 용도.
+   */
   r.get('/telegram-gallery', async (c) => {
     const db = getDb();
     const all = await db.select({ name: agents.name, displayName: agents.displayName }).from(agents);
-    const gallery = await Promise.all(
+    const N = 5; // 학습자당 최근 메시지 개수
+    const learners = await Promise.all(
       all.map(async (a) => {
-        const [latest] = await db
+        const recent = await db
           .select({
             text: telegramMessages.text,
             sentAt: telegramMessages.sentAt,
@@ -77,26 +81,31 @@ export function createWeek2Api() {
           .from(telegramMessages)
           .where(eq(telegramMessages.agentName, a.name))
           .orderBy(desc(telegramMessages.sentAt))
-          .limit(1);
-        const masked = latest?.text
-          ? latest.text
-              // 슬랙 user id (U…) 마스킹
-              .replace(/U[A-Z0-9]{8,}/g, 'U***')
-              // 채널 id (C…) 마스킹
-              .replace(/C[A-Z0-9]{8,}/g, 'C***')
-          : null;
+          .limit(N);
+
+        const messages = recent.map((m) => ({
+          text: maskPII(m.text ?? ''),
+          sentAt: m.sentAt,
+        }));
+        const tags = extractFeatureTags(messages.map((m) => m.text));
         return {
           agent: a.name,
           displayName: a.displayName,
-          message: masked,
-          sentAt: latest?.sentAt ?? null,
+          messageCount: messages.length,
+          latestAt: messages[0]?.sentAt ?? null,
+          tags,
+          messages,
         };
       }),
     );
     return c.json({
-      gallery: gallery
-        .filter((g) => g.message)
-        .sort((a, b) => (b.sentAt && a.sentAt ? new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime() : 0)),
+      learners: learners
+        .filter((l) => l.messageCount > 0)
+        .sort((a, b) =>
+          a.latestAt && b.latestAt
+            ? new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime()
+            : 0,
+        ),
     });
   });
 
@@ -157,4 +166,58 @@ export function createWeek2Api() {
   });
 
   return r;
+}
+
+/** PII 마스킹 — Slack user/channel ID */
+function maskPII(text: string): string {
+  return text.replace(/U[A-Z0-9]{8,}/g, 'U***').replace(/C[A-Z0-9]{8,}/g, 'C***');
+}
+
+/**
+ * 메시지 묶음에서 비개발자에게 의미 있는 "기능 태그" 추출.
+ * 규칙 기반 — LLM 호출 없이 빠른 패턴 매칭.
+ *
+ * 태그 예시:
+ *   "발신자 이름으로 표시", "채널명으로 표시", "분류 라벨", "버튼 첨부",
+ *   "요약 형태", "이모지 추가", "내용 다듬음", "한국어 변환"
+ */
+function extractFeatureTags(messages: string[]): string[] {
+  if (messages.length === 0) return [];
+  const tags = new Set<string>();
+  const joined = messages.join('\n');
+
+  // 사용자/채널 ID가 마스킹 후에도 보이면 = 이름 변환 미적용
+  // 마스킹 후 U***/C*** 가 있다는 건 원본에 raw ID가 있었다는 뜻
+  const hasRawUserId = /U\*{3}/.test(joined);
+  const hasRawChannelId = /C\*{3}/.test(joined);
+  if (!hasRawUserId) tags.add('발신자 이름으로 표시');
+  if (!hasRawChannelId) tags.add('채널명으로 표시');
+
+  // 분류 라벨 — [질문] / [요청] / [일정] / [참고] 같은 패턴
+  if (/\[(질문|요청|일정|참고|info|question|request|schedule|task)\]/i.test(joined)) {
+    tags.add('분류 라벨');
+  }
+
+  // 버튼 첨부 — 대부분의 텔레그램 메시지 단위로는 별도 필드라 표시 안 됨.
+  // 휴리스틱: "✅", "❌", "→", "버튼" 같은 흔적 또는 callback 데이터 마커
+  if (/(\b답변\b|\b확인\b|\b미루기\b|\b넘기기\b).*\|/.test(joined) || /\b\[버튼\]/.test(joined)) {
+    tags.add('버튼 첨부');
+  }
+
+  // 이모지 추가 — 이모지 1개라도 있으면
+  if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(joined)) {
+    tags.add('이모지 추가');
+  }
+
+  // 줄바꿈/마크다운 — `**`, `*`, `-` 리스트 마커
+  if (/\n{2,}/.test(joined) || /\*\*[^*]+\*\*/.test(joined) || /^[-•]\s/m.test(joined)) {
+    tags.add('내용 다듬음');
+  }
+
+  // 요약 형태 — 메시지가 4줄 이하 + 짧음
+  const avgLen =
+    messages.reduce((s, m) => s + m.length, 0) / Math.max(1, messages.length);
+  if (avgLen < 140 && avgLen > 10) tags.add('짧게 요약');
+
+  return Array.from(tags);
 }

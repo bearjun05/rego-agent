@@ -385,12 +385,34 @@ export interface AgentBlueprint {
   hasOnCron: boolean;
   hasOnTelegramCallback: boolean;
   handlerLines: number;
+  /** 본인이 _template에서 변경한 "실효 라인수". 손 안 댄 학습자는 0. */
+  effectiveLines: number;
+  /** _template handler 기준 라인수 (대조용) */
+  templateLines: number;
   stats: {
     runs: number;
     toolCalls: number;
     telegramSent: number;
     llmCost: number;
   };
+}
+
+/** _template handler 라인수 — 첫 호출에 캐시 (학습자가 시작점으로 받는 base) */
+let _templateLines: number | null = null;
+async function getTemplateLines(): Promise<number> {
+  if (_templateLines !== null) return _templateLines;
+  try {
+    const tpl = path.join(getAgentsRoot(), '_template', 'handler.ts');
+    if (!existsSync(tpl)) {
+      _templateLines = 0;
+      return 0;
+    }
+    const src = await fs.readFile(tpl, 'utf8');
+    _templateLines = src.split('\n').length;
+  } catch {
+    _templateLines = 0;
+  }
+  return _templateLines;
 }
 
 export async function buildBlueprint(agent: string): Promise<AgentBlueprint> {
@@ -402,6 +424,22 @@ export async function buildBlueprint(agent: string): Promise<AgentBlueprint> {
 
   const code = await loadLearnerCode(agent);
   const stats = await loadLearnerStats(agent);
+  const templateLines = await getTemplateLines();
+
+  // _template 그대로면 effectiveLines = 0 (시작 안 한 상태로 간주).
+  // 다르면 실제 라인 - 템플릿 라인 (음수면 0으로 클램프).
+  let effectiveLines = 0;
+  if (code.handlerExists && code.handlerSnippet) {
+    try {
+      const tpl = path.join(getAgentsRoot(), '_template', 'handler.ts');
+      const tplSrc = existsSync(tpl) ? await fs.readFile(tpl, 'utf8') : '';
+      if (code.handlerSnippet.trim() !== tplSrc.trim()) {
+        effectiveLines = Math.max(0, code.handlerLines - templateLines);
+      }
+    } catch {
+      effectiveLines = Math.max(0, code.handlerLines - templateLines);
+    }
+  }
 
   return {
     agent,
@@ -411,6 +449,8 @@ export async function buildBlueprint(agent: string): Promise<AgentBlueprint> {
     hasOnCron: code.handlerSnippet?.includes('onCron') ?? false,
     hasOnTelegramCallback: code.handlerSnippet?.includes('onTelegramCallback') ?? false,
     handlerLines: code.handlerLines,
+    effectiveLines,
+    templateLines,
     stats: {
       runs: stats.runs.total,
       toolCalls: stats.toolCalls.total,

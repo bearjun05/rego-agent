@@ -1,20 +1,20 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { countBingoLines, type CellMap } from '../CompletionBadge';
 
 interface AgentRow {
   name: string;
   displayName: string | null;
   bingoDone: number;
+  bingoCells?: CellMap;
 }
 
 /**
- * 16명 진행률을 큰 brick wall로 시각화 — 가로 8 × 세로 2 그리드,
- * 각 brick의 채워진 비율(빙고 진행)이 색으로 표현됨.
- * 호버 시 학습자 이름 + 진행 표시.
+ * 16명 빙고 현황 — 각자 3x3 미니 빙고판 + 완성된 라인을 SVG 선으로 추상 표현.
+ * 사용자가 어떤 라인(가로/세로/대각)을 완성했는지 한눈에.
  */
 export function BrickWall() {
   const [data, setData] = useState<AgentRow[]>([]);
-  const [hovered, setHovered] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,96 +33,144 @@ export function BrickWall() {
     };
   }, []);
 
-  // 정렬: 진행률 높은 순 + 이름순
-  const sorted = [...data].sort((a, b) =>
-    b.bingoDone !== a.bingoDone
-      ? b.bingoDone - a.bingoDone
-      : (a.displayName ?? a.name).localeCompare(b.displayName ?? b.name),
-  );
-
-  const hoveredAgent = sorted.find((a) => a.name === hovered);
+  // 정렬: 라인 수 → 칸 수 → 이름
+  const enriched = data.map((r) => ({
+    ...r,
+    lines: r.bingoCells ? countBingoLines(r.bingoCells) : 0,
+  }));
+  const sorted = [...enriched].sort((a, b) => {
+    if (b.lines !== a.lines) return b.lines - a.lines;
+    if (b.bingoDone !== a.bingoDone) return b.bingoDone - a.bingoDone;
+    return (a.displayName ?? a.name).localeCompare(b.displayName ?? b.name);
+  });
 
   return (
-    <div className="brut p-4 stud">
-      <div className="flex items-center justify-between mb-3">
-        <span className="font-display font-bold text-sm">🧱 16명 brick wall</span>
-        <span className="font-mono text-[10px] text-muted">
-          {hoveredAgent
-            ? `${hoveredAgent.displayName ?? hoveredAgent.name} · ${hoveredAgent.bingoDone}/9`
-            : '호버로 보기'}
-        </span>
+    <div className="brut p-4">
+      <div className="flex items-end justify-between mb-3 pb-2 border-b border-ink/15">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Status</div>
+          <div className="font-display font-bold text-base">빙고 현황</div>
+        </div>
+        <span className="font-mono text-[10px] text-muted">16명 · 15초마다 갱신</span>
       </div>
-      <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
         {sorted.map((r) => (
-          <Brick
-            key={r.name}
-            row={r}
-            onHover={() => setHovered(r.name)}
-            onLeave={() => setHovered(null)}
-          />
+          <MiniBingo key={r.name} row={r} />
         ))}
       </div>
     </div>
   );
 }
 
-function Brick({
+// 3x3 셀 위치 (id 1~9):
+//   1 2 3
+//   4 5 6
+//   7 8 9
+// 각 셀의 중심 좌표 (viewBox 100x100)
+const CELL_CENTER: Record<number, [number, number]> = {
+  1: [16, 16], 2: [50, 16], 3: [84, 16],
+  4: [16, 50], 5: [50, 50], 6: [84, 50],
+  7: [16, 84], 8: [50, 84], 9: [84, 84],
+};
+
+const LINES: Array<{ ids: number[]; from: number; to: number }> = [
+  // 가로
+  { ids: [1, 2, 3], from: 1, to: 3 },
+  { ids: [4, 5, 6], from: 4, to: 6 },
+  { ids: [7, 8, 9], from: 7, to: 9 },
+  // 세로
+  { ids: [1, 4, 7], from: 1, to: 7 },
+  { ids: [2, 5, 8], from: 2, to: 8 },
+  { ids: [3, 6, 9], from: 3, to: 9 },
+  // 대각
+  { ids: [1, 5, 9], from: 1, to: 9 },
+  { ids: [3, 5, 7], from: 3, to: 7 },
+];
+
+function completedLines(cells: CellMap | undefined): typeof LINES {
+  if (!cells) return [];
+  return LINES.filter((l) => l.ids.every((id) => cells[String(id)] === 'done'));
+}
+
+function MiniBingo({
   row,
-  onHover,
-  onLeave,
 }: {
-  row: AgentRow;
-  onHover: () => void;
-  onLeave: () => void;
+  row: AgentRow & { lines: number };
 }) {
-  const pct = row.bingoDone / 9;
+  const cells = row.bingoCells;
   const isFinished = row.bingoDone === 9;
-  // 색 — 진행도 따라 muted → accent
+  const lines = completedLines(cells);
+
   return (
     <div
-      className="relative aspect-[2/1] overflow-hidden border-2 border-line cursor-pointer transition-transform hover:scale-110 hover:z-10"
+      className={`relative border-2 p-2 transition-transform hover:scale-105 hover:z-10 ${
+        isFinished ? 'border-ink' : 'border-line'
+      }`}
       style={{
-        background: 'color-mix(in srgb, var(--th-fg) 8%, transparent)',
+        background: isFinished
+          ? 'color-mix(in srgb, var(--th-primary-2) 22%, var(--th-card-bg))'
+          : 'var(--th-card-bg)',
         borderRadius: 'var(--th-card-radius, 0)',
       }}
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
-      title={`${row.displayName ?? row.name} · ${row.bingoDone}/9`}
+      title={`${row.displayName ?? row.name} · ${row.lines}빙고 · ${row.bingoDone}/9칸`}
     >
-      {/* fill bar */}
-      <div
-        className="absolute inset-0 transition-all duration-700"
-        style={{
-          background: isFinished
-            ? 'var(--th-accent)'
-            : `linear-gradient(90deg, var(--th-accent) ${pct * 100}%, transparent ${pct * 100}%)`,
-          opacity: isFinished ? 1 : 0.85,
-        }}
-      />
-      {/* stud */}
-      <span
-        aria-hidden
-        className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full"
-        style={{ background: isFinished ? 'var(--th-bg)' : 'var(--th-fg)', opacity: 0.5 }}
-      />
-      {/* 이름 (small) */}
-      <span
-        className="absolute bottom-1 left-1 font-mono text-[8px] truncate max-w-[calc(100%-12px)]"
-        style={{ color: isFinished ? 'var(--th-bg)' : 'var(--th-fg)' }}
-      >
-        {(row.displayName ?? row.name).slice(0, 6)}
-      </span>
-      {/* 진행 숫자 */}
-      <span
-        className="absolute top-0.5 left-1 font-display font-extrabold"
-        style={{
-          color: isFinished ? 'var(--th-bg)' : 'var(--th-fg)',
-          opacity: 0.85,
-          fontSize: '11px',
-        }}
-      >
-        {row.bingoDone}
-      </span>
+      <div className="font-display font-bold text-[11px] leading-tight truncate mb-1.5">
+        {row.displayName ?? row.name}
+      </div>
+
+      {/* 3x3 미니 보드 + 라인 overlay */}
+      <div className="relative w-full" style={{ aspectRatio: '1 / 1' }}>
+        <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 gap-[2px]">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((id) => {
+            const done = cells?.[String(id)] === 'done';
+            return (
+              <div
+                key={id}
+                className="border border-ink/20"
+                style={{
+                  background: done ? 'var(--th-accent)' : 'color-mix(in srgb, var(--th-fg) 6%, transparent)',
+                  borderRadius: 1,
+                }}
+              />
+            );
+          })}
+        </div>
+        {/* 완성된 라인 SVG overlay */}
+        {lines.length > 0 && (
+          <svg
+            className="absolute inset-0 pointer-events-none"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+          >
+            {lines.map((l, i) => {
+              const [x1, y1] = CELL_CENTER[l.from]!;
+              const [x2, y2] = CELL_CENTER[l.to]!;
+              return (
+                <line
+                  key={i}
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke={isFinished ? 'var(--th-fg)' : 'var(--th-primary-2)'}
+                  strokeWidth={isFinished ? 6 : 5}
+                  strokeLinecap="round"
+                  opacity={0.85}
+                />
+              );
+            })}
+          </svg>
+        )}
+      </div>
+
+      <div className="mt-1.5 flex items-baseline justify-between font-mono text-[10px]">
+        <span className="font-display font-bold text-ink tabular-nums">
+          {row.lines}<span className="text-muted font-normal text-[9px] ml-0.5">빙고</span>
+        </span>
+        <span className="text-muted tabular-nums">
+          {row.bingoDone}<span className="text-[9px] ml-0.5">/9칸</span>
+        </span>
+      </div>
     </div>
   );
 }

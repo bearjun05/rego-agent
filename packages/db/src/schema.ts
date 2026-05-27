@@ -379,6 +379,27 @@ export const slackPollCursors = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────
+// bingo_claims — 학습자가 verify 통과해서 "내가 풀었다" 표시한 빙고 칸 기록.
+// 자동 검증이 통과해도 여기에 행이 없으면 done 으로 간주하지 않는다.
+// 의도: 본인이 직접 들어가서 검증 받아야만 한 칸씩 채워짐.
+// ─────────────────────────────────────────────────────────
+export const bingoClaims = pgTable(
+  'bingo_claims',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    agentName: text('agent_name').notNull(),
+    cellId: integer('cell_id').notNull(), // 1..9
+    verifiedAt: timestamp('verified_at', { withTimezone: true }).notNull().defaultNow(),
+    /** 검증 시점의 자동 체크 통과 사유 (감사용) */
+    reason: text('reason'),
+  },
+  (t) => ({
+    agentCellUniq: uniqueIndex('bingo_claims_agent_cell_uniq').on(t.agentName, t.cellId),
+    agentIdx: index('bingo_claims_agent_idx').on(t.agentName),
+  }),
+);
+
+// ─────────────────────────────────────────────────────────
 // Inferred types
 // ─────────────────────────────────────────────────────────
 export type Agent = typeof agents.$inferSelect;
@@ -395,3 +416,4 @@ export type AuditLogRow = typeof auditLogs.$inferSelect;
 export type ChatMessageRow = typeof chatMessages.$inferSelect;
 export type SlackUserTokenRow = typeof slackUserTokens.$inferSelect;
 export type SlackPollCursorRow = typeof slackPollCursors.$inferSelect;
+export type BingoClaimRow = typeof bingoClaims.$inferSelect;

@@ -21,7 +21,10 @@ export function CellClearRates() {
 
   return (
     <div className="brut p-4">
-      <div className="font-display font-bold text-sm mb-4">📊 빙고별 클리어율</div>
+      <div className="mb-4 pb-2 border-b border-ink/15">
+        <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Clear rate</div>
+        <div className="font-display font-bold text-base">빙고별 클리어율</div>
+      </div>
       <div className="grid grid-cols-9 gap-2 h-40">
         {data.map((c) => {
           const fillCount = Math.round(c.rate * 10);

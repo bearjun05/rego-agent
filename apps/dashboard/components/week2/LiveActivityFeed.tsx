@@ -27,6 +27,17 @@ function emoji(type: string, status: string): string {
   return '·';
 }
 
+/** 트리거 type을 친숙한 한국어로 */
+function triggerKo(type: string): string {
+  if (type === 'slack.mention') return '슬랙 멘션';
+  if (type === 'telegram.callback') return '텔레그램 버튼';
+  if (type === 'cron') return '정기 발화';
+  if (type === 'manual') return '수동 실행';
+  if (type.startsWith('slack.')) return `슬랙 · ${type.slice(6)}`;
+  if (type.startsWith('telegram.')) return `텔레그램 · ${type.slice(9)}`;
+  return type;
+}
+
 export function LiveActivityFeed() {
   const [data, setData] = useState<Activity[]>([]);
 
@@ -43,8 +54,11 @@ export function LiveActivityFeed() {
 
   return (
     <div className="brut p-4 bg-paper">
-      <div className="font-display font-bold text-sm mb-3 flex items-center justify-between">
-        <span>📡 라이브 활동</span>
+      <div className="flex items-end justify-between mb-3 pb-2 border-b border-ink/15">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Live</div>
+          <div className="font-display font-bold text-base">라이브 활동</div>
+        </div>
         <span className="font-mono text-[10px] text-muted">10초마다 갱신</span>
       </div>
       <ul className="space-y-1.5 max-h-[280px] overflow-y-auto">
@@ -53,9 +67,9 @@ export function LiveActivityFeed() {
         )}
         {data.map((a, i) => (
           <li key={i} className="flex items-center gap-2 text-xs font-mono">
-            <span>{emoji(a.type, a.status)}</span>
+            <span className="w-4 text-center">{emoji(a.type, a.status)}</span>
             <span className="flex-1 truncate">
-              <strong>{a.agent}</strong> · {a.type}
+              <strong>{a.agent}</strong> · <span className="text-ink/70">{triggerKo(a.type)}</span>
             </span>
             <span className="text-muted">{timeAgo(a.at)}</span>
           </li>
