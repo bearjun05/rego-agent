@@ -26,11 +26,30 @@ export default defineHandler({
       `${summarizePrompt}\n\n---\n슬랙 메시지:\n${event.text}`,
     );
 
+    // 텔레그램 보내기 전에 슬랙 API로 사람 이름·채널명 보강.
+    // 조회 실패(권한/없는 ID 등)해도 이벤트가 준 값으로 폴백 → 알림은 계속 나간다.
+    let fromName = event.userName ?? event.user;
+    let channelName = event.channelName ?? event.channel;
+
+    try {
+      const u = await ctx.tools['slack.users_info']!({ user: event.user });
+      fromName = u.real_name ?? u.display_name ?? u.name ?? fromName;
+    } catch (err) {
+      ctx.logger.warn('users_info 조회 실패 — 이벤트 값 사용', { err: String(err) });
+    }
+
+    try {
+      const c = await ctx.tools['slack.conversations_info']!({ channel: event.channel });
+      channelName = c.name ?? channelName;
+    } catch (err) {
+      ctx.logger.warn('conversations_info 조회 실패 — 이벤트 값 사용', { err: String(err) });
+    }
+
     const lines = [
       `📨 *멘션 요약*`,
       ``,
-      `*from:* ${event.userName ?? event.user}`,
-      `*ch:* #${event.channelName ?? event.channel}`,
+      `*from:* ${fromName}`,
+      `*ch:* #${channelName}`,
       ``,
       summary.trim(),
     ];

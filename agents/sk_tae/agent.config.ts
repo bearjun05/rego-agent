@@ -25,6 +25,8 @@ export default defineAgent({
     'telegram.answer_callback',
     'telegram.edit_message',
     'slack.reactions_add',
+    'slack.users_info',
+    'slack.conversations_info',
   ],
 
   // 모델 선택은 선택사항 (런타임 기본값 사용)
