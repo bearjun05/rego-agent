@@ -11,7 +11,7 @@ import { defineAgent, trigger } from '@rego/runtime-sdk';
 export default defineAgent({
   name: 'yeonjin_joo',
   displayName: '주연진',
-  description: '슬랙 멘션을 분류·요약하고, 👀 반응 + 텔레그램 버튼 알림 + 아침 브리핑까지 보내줘요',
+  description: '슬랙 멘션을 분류·요약하고, 텔레그램 버튼 알림 + 아침 브리핑까지 보내줘요',
   icon: '🧩',
   color: '#2E7A6B',
 
@@ -26,7 +26,6 @@ export default defineAgent({
     'telegram.send', // 알림 전송
     'telegram.answer_callback', // 버튼 클릭 ack (빙고 4)
     'telegram.edit_message', // 버튼 누른 결과로 메시지 수정 (빙고 4)
-    'slack.reactions_add', // 멘션에 자동 👀 (빙고 3)
     'slack.users_info', // 사용자 ID → 이름 (빙고 5·7)
     'slack.conversations_info', // 채널 ID → 채널명 (빙고 5)
     'slack.reactions_list', // 이모지 BEST 5 분석 (빙고 6)

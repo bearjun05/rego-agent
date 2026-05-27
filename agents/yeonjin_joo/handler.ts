@@ -168,25 +168,15 @@ async function analyzePeople(ctx: AgentContext): Promise<string> {
 export default defineHandler({
   /**
    * 슬랙에서 본인이 멘션될 때.
-   *   - [빙고 3] 받자마자 👀 이모지
    *   - [빙고 5] ID → 이름/채널명 변환
    *   - 분류 + 요약(LLM 병렬)
    *   - [빙고 4] [확인]/[패스] 버튼이 달린 텔레그램 알림
    *   - 아침 브리핑(빙고 8) 재료로 상태에 누적
+   *
+   * (빙고 3 자동 👀 이모지는 사용자 요청으로 비활성화함.)
    */
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
-
-    // [빙고 3] 받자마자 원문에 👀 — 실패해도 알림 흐름은 계속.
-    try {
-      await ctx.tools['slack.reactions_add']!({
-        channel: event.channel,
-        ts: event.ts,
-        name: 'eyes',
-      });
-    } catch (err) {
-      ctx.logger.warn('slack.reactions_add 실패 (무시하고 진행)', err);
-    }
 
     // [빙고 6·7] "이모지 분석해줘" / "태그 분석해줘" 같은 명령이면 분석 모드로.
     const command = detectCommand(event.text);
