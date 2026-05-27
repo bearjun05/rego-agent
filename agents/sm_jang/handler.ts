@@ -41,13 +41,35 @@ export default defineHandler({
 
     const [c1, c2] = candidates;
 
+    let fromName = event.userName;
+    if (!fromName && event.user) {
+      try {
+        const u = await ctx.tools['slack.users_info']!({ user: event.user });
+        fromName = u.display_name || u.real_name || u.name || event.user;
+      } catch (err) {
+        ctx.logger.warn('users_info 실패', { user: event.user, err: String(err) });
+        fromName = event.user;
+      }
+    }
+
+    let chName = event.channelName;
+    if (!chName && event.channel) {
+      try {
+        const c = await ctx.tools['slack.conversations_info']!({ channel: event.channel });
+        chName = c.name || event.channel;
+      } catch (err) {
+        ctx.logger.warn('conversations_info 실패', { channel: event.channel, err: String(err) });
+        chName = event.channel;
+      }
+    }
+
     const lines = [
       `📣 *슬랙 멘션*`,
       ``,
       `📝 ${summary}`,
       ``,
-      `*from:* ${event.userName ?? event.user}`,
-      `*ch:* #${event.channelName ?? event.channel}`,
+      `*from:* ${fromName}`,
+      `*ch:* #${chName}`,
       ``,
       `──────────`,
       `✏️ *답장 후보*`,
