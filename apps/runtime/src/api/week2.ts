@@ -6,6 +6,7 @@ import {
   runs,
   toolCalls,
   telegramMessages,
+  slackMentions,
   llmCalls,
 } from '@rego/db';
 import { CELL_IDS, CELL_DEFS, type CellId } from '../bingo-rules.js';
@@ -65,7 +66,14 @@ export function createWeek2Api() {
 
   /**
    * 텔레그램 갤러리 — 학습자별 최근 메시지들 + 규칙 기반 추출 "기능 태그".
-   * 비개발자가 한눈에 "이 사람 메시지에 어떤 기능이 들어있나" 보는 용도.
+   *
+   * ★ 프라이버시 규칙 (절대):
+   *   비공개(private/group/im/mpim) 슬랙 채널에서 온 메시지는 표시하지 않는다.
+   *   - 슬랙 멘션과 연결됨 (triggered_by_slack_mention_id IS NOT NULL) AND
+   *   - slack_mentions.raw.event.channel_type = 'channel' (public 확정)
+   *   둘 다 만족하는 메시지만 통과.
+   *   - 폴링(source='poll')은 raw에 channel_type이 없어 비공개 여부 불확실 → 제외.
+   *   - 슬랙 기반 아닌 텔레그램(cron 등)도 제외 (갤러리 의미와도 맞음).
    */
   r.get('/telegram-gallery', async (c) => {
     const db = getDb();
@@ -73,13 +81,23 @@ export function createWeek2Api() {
     const N = 5; // 학습자당 최근 메시지 개수
     const learners = await Promise.all(
       all.map(async (a) => {
+        // public 채널 (raw.event.channel_type='channel') 만 통과시키는 JOIN
         const recent = await db
           .select({
             text: telegramMessages.text,
             sentAt: telegramMessages.sentAt,
           })
           .from(telegramMessages)
-          .where(eq(telegramMessages.agentName, a.name))
+          .innerJoin(
+            slackMentions,
+            eq(telegramMessages.triggeredBySlackMentionId, slackMentions.id),
+          )
+          .where(
+            and(
+              eq(telegramMessages.agentName, a.name),
+              sql`${slackMentions.raw}->'event'->>'channel_type' = 'channel'`,
+            ),
+          )
           .orderBy(desc(telegramMessages.sentAt))
           .limit(N);
 

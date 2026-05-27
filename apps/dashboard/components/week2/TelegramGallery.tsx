@@ -41,10 +41,10 @@ export function TelegramGallery() {
     <div className="brut p-4 bg-paper">
       <div className="mb-3 pb-2 border-b border-ink/15">
         <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Telegram</div>
-        <div className="font-display font-bold text-base">텔레그램 메시지 갤러리</div>
+        <div className="font-display font-bold text-base">이렇게 메시지 받고 있어요</div>
         {!selected && (
           <div className="font-mono text-[10px] text-muted mt-0.5">
-            사람 카드를 클릭하면 그 사람이 실제로 받는 메시지 5개가 펼쳐져요.
+            사람 카드를 클릭하면 그 사람이 실제로 받는 메시지 5개가 펼쳐져요. 공개 채널 메시지만 표시됩니다.
           </div>
         )}
       </div>

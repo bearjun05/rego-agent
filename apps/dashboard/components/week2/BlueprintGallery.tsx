@@ -34,7 +34,7 @@ export function BlueprintGallery() {
     <div className="brut p-4 bg-paper">
       <div className="mb-3 pb-2 border-b border-ink/15">
         <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Blueprint</div>
-        <div className="font-display font-bold text-base">청사진 갤러리</div>
+        <div className="font-display font-bold text-base">구현 현황</div>
         {!selected && (
           <div className="font-mono text-[10px] text-muted mt-0.5">
             본인이 직접 깎은 줄 수 기준. 0줄 = 아직 시작 안 함.
