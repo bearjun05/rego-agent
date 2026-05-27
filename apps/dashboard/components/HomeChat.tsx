@@ -412,10 +412,10 @@ export function HomeChat() {
   }, [slug, stage, busy, typing]);
 
   const handleBingoCellClick = async (cell: CellDef, status: CellStatus) => {
-    // 더블클릭 가드 — 같은 셀을 1.5초 내 다시 누르면 무시 (mission 카드/가이드 중복 표시 방지)
+    // 짧은 시간 연속 클릭만 무시 (700ms) — 코드 짜다가 한참 후 다시 누르는 건 자유롭게 허용
     const now = Date.now();
     const last = cellClickAtRef.current.get(cell.id) ?? 0;
-    if (now - last < 1500) return;
+    if (now - last < 700) return;
     cellClickAtRef.current.set(cell.id, now);
 
     if (status === 'done') {
@@ -845,10 +845,9 @@ export function HomeChat() {
                     ) : (
                       <button
                         onClick={() => verifyCell(m.card && m.card.type === 'mission' ? m.card.cell : null)}
-                        disabled={busy}
-                        className="btn btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="btn btn-primary text-xs"
                       >
-                        {busy ? '확인 중…' : '미션 완성하기 →'}
+                        미션 완성하기 →
                       </button>
                     )}
                   </div>
