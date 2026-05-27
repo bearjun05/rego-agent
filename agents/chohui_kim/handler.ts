@@ -83,13 +83,21 @@ export default defineHandler({
     if (threadContext) lines.push(``, `💬 스레드 맥락 포함하여 요약됨`);
     lines.push(``, `> ${event.text.slice(0, 200)}${event.text.length > 200 ? '…' : ''}`);
 
+    // telegram.send_with_button 실패 시 → telegram.send 로 fallback (알림 누락 방지)
+    // 주의: send_with_button은 런타임 DB 추적 대상이 아님(agent-runner는 telegram.send만 기록)
+    //       → fallback으로 send를 쓰면 대시보드에도 정상 집계됨
     await ctx.tools['telegram.send_with_button']!({
       text: lines.join('\n'),
       buttons: [
         // callbackData는 텔레그램 64바이트 제한 → permalink 대신 ts만 사용
         { text: '슬랙에서 답장하기 →', callbackData: event.ts },
       ],
-    }).catch((e) => ctx.logger.warn('텔레그램 전송 실패', { e }));
+    }).catch(async (e) => {
+      ctx.logger.warn('텔레그램 버튼 전송 실패 → plain send 재시도', { e });
+      await ctx.tools['telegram.send']!({
+        text: lines.join('\n'),
+      }).catch((e2) => ctx.logger.error('텔레그램 전송 최종 실패', { e2 }));
+    });
 
     return { category, confidence, summary: summary.trim() };
   },
