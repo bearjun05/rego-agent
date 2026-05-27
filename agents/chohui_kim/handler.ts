@@ -86,9 +86,10 @@ export default defineHandler({
     await ctx.tools['telegram.send_with_button']!({
       text: lines.join('\n'),
       buttons: [
-        { text: '슬랙에서 답장하기 →', callbackData: event.permalink ?? event.ts },
+        // callbackData는 텔레그램 64바이트 제한 → permalink 대신 ts만 사용
+        { text: '슬랙에서 답장하기 →', callbackData: event.ts },
       ],
-    });
+    }).catch((e) => ctx.logger.warn('텔레그램 전송 실패', { e }));
 
     return { category, confidence, summary: summary.trim() };
   },

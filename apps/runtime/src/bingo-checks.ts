@@ -140,36 +140,59 @@ async function checkButtonCallback(agentName: string): Promise<CheckResult> {
 }
 
 // ─────────────────────────────────────────────────────────
-// 셀 5 — LLM 코드 리뷰 (handler가 이름 enrich했는지)
+// 셀 5 — 이름 변환 (handler 가 user/channel enrich 도구를 쓰는지)
+//
+// 통과 신호 두 가지 (OR):
+//   A) 실제 도구 호출이 한 번이라도 성공 — 모든 alias(users_info/user_info/conversations_info/channel_info)
+//   B) 폴백: handler.ts 코드에 호출 패턴이 보임 (학습자가 코드만 짜고 아직 발화 전이어도 인정)
 // ─────────────────────────────────────────────────────────
+const ENRICH_TOOL_IDS = [
+  'slack.users_info',
+  'slack.user_info',
+  'slack.conversations_info',
+  'slack.channel_info',
+];
+
 async function reviewHandlerCode(agentName: string, criterion: 'names'): Promise<CheckResult> {
+  if (criterion !== 'names') {
+    return { passed: false, reason: `unknown criterion: ${criterion}` };
+  }
+
+  // A) 실제 호출 — 가장 신뢰 가능한 신호
+  const db = getDb();
+  const [callRow] = await db
+    .select({ cnt: sql<number>`count(*)::int` })
+    .from(toolCalls)
+    .where(
+      and(
+        eq(toolCalls.agentName, agentName),
+        or(...ENRICH_TOOL_IDS.map((id) => eq(toolCalls.toolId, id))),
+        sql`${toolCalls.error} IS NULL`,
+      ),
+    );
+  if (callRow && callRow.cnt > 0) {
+    return { passed: true, reason: `슬랙 enrich 도구 ${callRow.cnt}회 호출됨` };
+  }
+
+  // B) 정적 폴백 — 코드만 작성하고 아직 발화 안 한 경우도 인정
   const filePath = path.join(getAgentsRoot(), agentName, 'handler.ts');
   let code: string;
   try {
     code = await fs.readFile(filePath, 'utf8');
   } catch {
-    return { passed: false, reason: `handler.ts를 읽을 수 없어요: ${filePath}` };
+    return { passed: false, reason: 'handler.ts 를 읽을 수 없어요. (본인 폴더 자동 생성 대기 중일 수 있음)' };
   }
-
-  // 빠른 정적 체크 — 도구 호출 패턴이 코드에 있나
-  if (criterion === 'names') {
-    const hasUsersInfo =
-      /tools\[['"`]slack\.users_info['"`]\]|tools\.slack\.users_info/.test(code);
-    const hasConvInfo =
-      /tools\[['"`]slack\.conversations_info['"`]\]|tools\.slack\.conversations_info/.test(code);
-    if (!hasUsersInfo && !hasConvInfo) {
-      return {
-        passed: false,
-        reason: '핸들러에 `slack.users_info` 또는 `slack.conversations_info` 호출이 안 보여요',
-        hint:
-          'await ctx.tools["slack.users_info"]({ user: event.user }) 로 이름 받아서 텔레그램에 박아보세요',
-      };
-    }
-    // 도구는 호출하는데 실제로 메시지에 반영했는지 → LLM에 위임 (선택)
-    // 시간 절약: 정적 통과 = 클리어 (학습자가 진심으로 작성한 거라 신뢰)
-    return { passed: true, reason: '슬랙 enrich 도구 호출 감지됨' };
+  const codeRe =
+    /tools\[['"`]slack\.(users_info|user_info|conversations_info|channel_info)['"`]\]|tools\.slack\.(users_info|user_info|conversations_info|channel_info)/;
+  if (codeRe.test(code)) {
+    return { passed: true, reason: '핸들러에 enrich 도구 호출 패턴 감지됨 (실행은 아직 안 했어요)' };
   }
-  return { passed: false, reason: `unknown criterion: ${criterion}` };
+  return {
+    passed: false,
+    reason: '핸들러에 `slack.users_info` 또는 `slack.conversations_info` 호출이 안 보여요',
+    hint:
+      'await ctx.tools["slack.users_info"]({ user: event.user }) 로 이름 받아서 텔레그램에 박아보세요',
+  };
 }
 
 // ─────────────────────────────────────────────────────────
