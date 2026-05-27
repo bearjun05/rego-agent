@@ -207,13 +207,14 @@ export function createChatApi() {
     //  Tool 정의 — 카드 첨부를 모델이 결정
     // ─────────────────────────────────────────────────────────
     // UI action 도구 (클라이언트가 카드 렌더, LLM에 결과 안 돌려보냄)
+    // 룰: 학습자가 카드를 명시적으로 요청한 경우에만 호출. 짧은 응답·일반 대화·인사엔 X.
     const uiTools: ToolDef[] = [
       {
         type: 'function',
         function: {
           name: 'show_monitor_card',
           description:
-            '16명 학습자의 빙고 진행률·활동을 한눈에 보는 카드를 띄움. 사용자가 "다른 사람들 뭐해?", "전체 진행", "누가 막혔어?" 같은 의도를 보일 때 호출.',
+            '16명 학습자 전체 진행 모니터 카드. 학습자가 명시적으로 "다른 사람들 뭐해?", "전체 진행", "누가 막혔어?" 같이 다른 사람 상황을 직접 물을 때만 호출. 일반 대화·인사·격려엔 호출 X.',
           parameters: { type: 'object', properties: {} },
         },
       },
@@ -222,7 +223,7 @@ export function createChatApi() {
         function: {
           name: 'show_theme_picker',
           description:
-            '4개의 추천 테마를 카드로 띄움. 사용자가 테마/디자인/분위기 변경 의도를 보일 때 호출.',
+            '테마 추천 카드. 학습자가 명시적으로 "테마 바꿔", "다크모드", "디자인 다르게", "분위기 바꿔" 같이 테마 변경 의도를 직접 표현했을 때만 호출. 인사·일반 대화엔 호출 X.',
           parameters: {
             type: 'object',
             properties: {
@@ -241,7 +242,8 @@ export function createChatApi() {
         type: 'function',
         function: {
           name: 'show_oauth_card',
-          description: '[Slack 인증하기] 버튼 카드를 띄움. 사용자가 OAuth/슬랙 연결 시작을 원할 때.',
+          description:
+            '[Slack 인증하기] 카드. 학습자가 명시적으로 "슬랙 연결할래", "Slack OAuth 시작", "슬랙 어떻게 연결?" 같이 슬랙 인증을 직접 시작하려 할 때만 호출. 일반 대화엔 X.',
           parameters: { type: 'object', properties: {} },
         },
       },
@@ -250,7 +252,7 @@ export function createChatApi() {
         function: {
           name: 'show_reload_button',
           description:
-            '[내 코드 적용하기] 버튼 카드를 띄움. 사용자가 본인 코드를 서버에 반영하려고 할 때.',
+            '[내 코드 적용하기] 카드. 자동 동기화가 안 되거나 강제 적용이 필요한 경우만 호출. 일반적으로 push만 하면 자동 반영되므로 거의 안 씀. 학습자가 "수동으로 적용", "강제 reload" 같이 명시할 때만.',
           parameters: { type: 'object', properties: {} },
         },
       },
@@ -258,7 +260,8 @@ export function createChatApi() {
         type: 'function',
         function: {
           name: 'show_bingo_board',
-          description: '본인 빙고판을 띄움. 사용자가 진행 상황을 보고 싶어할 때.',
+          description:
+            '본인 빙고판 카드. 학습자가 명시적으로 "빙고판 보여줘", "내 진행 어디까지?", "빙고 열어줘" 같이 빙고판을 직접 요청할 때만 호출. 짧은 응답("응", "네", "ㅎㅎ", "확인")·인사·격려·일반 대화엔 절대 호출 X.',
           parameters: { type: 'object', properties: {} },
         },
       },

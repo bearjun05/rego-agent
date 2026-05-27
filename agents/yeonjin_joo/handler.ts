@@ -73,6 +73,98 @@ async function appendDailyLog(ctx: AgentContext, entry: MentionLog): Promise<voi
   await ctx.state.set(key, prev.slice(-50));
 }
 
+// ─────────────────────────────────────────────────────────
+// 분석 명령 (빙고 6·7) — 멘션에 "이모지 분석" / "태그 분석" 같은 말이 있으면 발동
+// ─────────────────────────────────────────────────────────
+const ANALYZE_VERB = /(분석|베스트|best|top|순위|랭킹|뽑아)/i;
+
+/** 멘션 텍스트에서 분석 의도 감지. 분석 동사 + 주제어가 둘 다 있어야 발동(오발동 방지). */
+function detectCommand(text: string): 'emoji' | 'people' | null {
+  if (!ANALYZE_VERB.test(text)) return null;
+  if (/이모지|emoji|반응|리액션|이모티콘/i.test(text)) return 'emoji';
+  if (/태그|멘션|사람|동료|mention|people/i.test(text)) return 'people';
+  return null;
+}
+
+/** [빙고 6] 내가 반응을 남긴 메시지들 기준 이모지 BEST 5 */
+async function analyzeEmojis(ctx: AgentContext): Promise<string> {
+  let items: Array<{
+    message?: { reactions?: Array<{ name?: string; count?: number }> };
+    file?: { reactions?: Array<{ name?: string; count?: number }> };
+  }> = [];
+  try {
+    const res = (await ctx.tools['slack.reactions_list']!({ count: 100, page: 1 })) as {
+      items?: typeof items;
+    };
+    items = res.items ?? [];
+  } catch (err) {
+    ctx.logger.warn('slack.reactions_list 실패', err);
+    return '이모지 활동을 가져오지 못했어요 (권한/데이터 부족일 수 있어요). 직접 5개 적어주셔도 돼요.';
+  }
+
+  const tally = new Map<string, number>();
+  for (const item of items) {
+    const reactions = item.message?.reactions ?? item.file?.reactions ?? [];
+    for (const r of reactions) {
+      if (r.name) tally.set(r.name, (tally.get(r.name) ?? 0) + (r.count ?? 1));
+    }
+  }
+  const top = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  if (top.length === 0) {
+    return '최근 이모지 활동 데이터가 부족해요. 슬랙에서 이모지를 좀 더 쓴 뒤 다시 시도해보세요.';
+  }
+  return top.map(([name, count], i) => `${i + 1}. :${name}: — ${count}회`).join('\n');
+}
+
+/** [빙고 7] 내가 보낸 메시지에서 가장 많이 태그한 사람 BEST 3 */
+async function analyzePeople(ctx: AgentContext): Promise<string> {
+  let matches: Array<{ text?: string }> = [];
+  try {
+    const res = (await ctx.tools['slack.search_messages']!({
+      query: 'from:me',
+      count: 100,
+      sort: 'timestamp',
+    })) as { matches?: typeof matches };
+    matches = res.matches ?? [];
+  } catch (err) {
+    ctx.logger.warn('slack.search_messages 실패', err);
+    return '내 메시지 검색에 실패했어요 (검색 권한/인덱싱 지연일 수 있어요). 직접 3명 적어주셔도 돼요.';
+  }
+
+  const tally = new Map<string, number>();
+  for (const m of matches) {
+    for (const mm of (m.text ?? '').matchAll(/<@([A-Z0-9]+)>/g)) {
+      const id = mm[1];
+      if (id) tally.set(id, (tally.get(id) ?? 0) + 1);
+    }
+  }
+  const top = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  if (top.length === 0) {
+    return '태그 기록을 충분히 못 찾았어요 (검색 인덱싱 지연일 수 있어요). 직접 3명 적어주셔도 돼요.';
+  }
+
+  // 상위 3명만 이름 변환 (API 호출 절약)
+  const lines: string[] = [];
+  for (let i = 0; i < top.length; i++) {
+    const entry = top[i];
+    if (!entry) continue;
+    const [id, count] = entry;
+    let name = id;
+    try {
+      const u = (await ctx.tools['slack.users_info']!({ user: id })) as {
+        name?: string;
+        real_name?: string;
+        display_name?: string;
+      };
+      name = u.display_name || u.real_name || u.name || id;
+    } catch {
+      /* 이름 변환 실패 시 ID 그대로 */
+    }
+    lines.push(`${i + 1}. ${name} — ${count}회 태그`);
+  }
+  return lines.join('\n');
+}
+
 export default defineHandler({
   /**
    * 슬랙에서 본인이 멘션될 때.
@@ -94,6 +186,25 @@ export default defineHandler({
       });
     } catch (err) {
       ctx.logger.warn('slack.reactions_add 실패 (무시하고 진행)', err);
+    }
+
+    // [빙고 6·7] "이모지 분석해줘" / "태그 분석해줘" 같은 명령이면 분석 모드로.
+    const command = detectCommand(event.text);
+    if (command === 'emoji') {
+      const body = await analyzeEmojis(ctx);
+      await ctx.tools['telegram.send']!({
+        text: `🎨 *이모지 BEST 5*\n\n${body}\n\n_이 결과를 대시보드 채팅창(빙고 6)에 붙여넣으면 클리어돼요._`,
+        parseMode: 'Markdown',
+      });
+      return { command, body };
+    }
+    if (command === 'people') {
+      const body = await analyzePeople(ctx);
+      await ctx.tools['telegram.send']!({
+        text: `🏷️ *내가 가장 많이 태그한 사람 BEST 3*\n\n${body}\n\n_이 결과를 대시보드 채팅창(빙고 7)에 붙여넣으면 클리어돼요._`,
+        parseMode: 'Markdown',
+      });
+      return { command, body };
     }
 
     // [빙고 5] 이름·채널명 변환 + 분류 + 요약을 한꺼번에 병렬로.
@@ -170,24 +281,27 @@ export default defineHandler({
    */
   async onTelegramCallback(event, ctx) {
     const action = event.data.split(':')[0];
-    const label = action === 'ack' ? '✅ 확인함' : '⏭️ 패스함';
+    const status = action === 'ack' ? '✅ 확인했어요' : '⏭️ 패스했어요';
 
     // 버튼 스피너 멈추기 + toast.
     await ctx.tools['telegram.answer_callback']!({
       callbackQueryId: event.callbackQueryId,
-      text: label,
+      text: status,
     });
 
-    // 원본 메시지 끝에 처리 결과를 덧붙임 (parseMode 없이 plain — entity 깨짐 방지).
+    // 원본 메시지를 "✅ 확인했어요 / ⏭️ 패스했어요"로 수정.
+    // 상태를 맨 위에 두고 원문은 아래에 남겨 무엇을 처리했는지 알 수 있게 함.
+    // parseMode 없이 plain — 원문에 박힌 마크다운 엔티티가 깨지지 않게.
+    // (replyMarkup 미전달 → 수정 시 버튼이 사라져 중복 클릭 방지)
     const stamp = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    const newText = `${event.messageText ?? ''}\n\n— ${label} (${stamp})`;
+    const newText = `${status}  (${stamp})\n\n${event.messageText ?? ''}`;
     await ctx.tools['telegram.edit_message']!({
       chatId: event.chatId,
       messageId: event.messageId,
       text: newText,
     });
 
-    return { action, handled: true };
+    return { action, status, handled: true };
   },
 
   /**
