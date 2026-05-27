@@ -39,8 +39,55 @@ export default defineHandler({
     await ctx.tools['telegram.send']!({
       text: lines.join('\n'),
       parseMode: 'Markdown',
+      replyMarkup: {
+        inline_keyboard: [
+          [
+            { text: '✅ 확인', callback_data: 'ack' },
+            { text: '⏭️ 패스', callback_data: 'pass' },
+          ],
+        ],
+      },
     });
 
     return { summary: summary.trim() };
+  },
+
+  async onTelegramCallback(event, ctx) {
+    ctx.logger.info('텔레그램 버튼 클릭', {
+      data: event.data,
+      by: event.userName ?? event.userId,
+    });
+
+    const who = event.userName ?? event.userId;
+    const at = new Date().toLocaleTimeString('ko-KR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Seoul',
+    });
+
+    // 어떤 버튼을 눌렀는지에 따라 상태 헤더 결정
+    const status =
+      event.data === 'ack'
+        ? `✅ 확인 완료 · ${who} · ${at}`
+        : event.data === 'pass'
+          ? `⏭️ 패스함 · ${who} · ${at}`
+          : `❓ 알 수 없는 동작 (${event.data})`;
+
+    // 버튼 클릭 ack — 안 하면 버튼에 로딩 스피너가 계속 돈다
+    await ctx.tools['telegram.answer_callback']!({
+      callbackQueryId: event.callbackQueryId,
+      text: event.data === 'ack' ? '확인 처리했어요' : '패스했어요',
+    });
+
+    // 원본 메시지를 "상태 헤더 + 원문" 으로 수정.
+    // replyMarkup 을 안 넘기면 텔레그램이 인라인 버튼을 제거 → 한 번만 누르게 됨.
+    const body = event.messageText ?? '';
+    await ctx.tools['telegram.edit_message']!({
+      chatId: event.chatId,
+      messageId: event.messageId,
+      text: body ? `${status}\n\n${body}` : status,
+    });
+
+    return { action: event.data };
   },
 });
