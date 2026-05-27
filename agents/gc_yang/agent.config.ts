@@ -28,5 +28,5 @@ export default defineAgent({
     trigger.manual(),
   ],
 
-  tools: ['telegram.send'],
+  tools: ['telegram.send', 'slack.reactions_add'],
 });
