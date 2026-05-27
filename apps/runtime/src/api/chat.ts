@@ -160,6 +160,19 @@ export function createChatApi() {
 
     const staticPrompt = buildInsolStaticPrompt({ callName, agentName });
 
+    // 현재 주차 강조 — 시스템 프롬프트 최상단에 박아 모델이 "1주차" 오인 못 하게
+    const todayStr = new Date().toLocaleDateString('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short',
+    });
+    const nowBlock = `# 🗓 [현재 주차 — 절대 오인 금지]
+오늘은 ${todayStr} · **${weekLabel()}** (${currentWeek()}주차) 진행 중.
+학습자가 "오늘 몇 주차?" 같이 물으면 반드시 "${weekLabel()}"라고 답해.
+프롬프트 어디에 "1주차"가 등장해도 그건 커리큘럼 단계 설명일 뿐, 현재 시점이 아님.`;
+
     const firstTurnHint =
       isFirstTurn && callName
         ? `[첫 응답 가이드] "안녕하세요 ${callName}님!" → 이번 주차에 뭘 할지 한 줄 → 진행 상황 짧게 → 다음 한 걸음 물어보기. 길지 않게.`
@@ -185,7 +198,8 @@ export function createChatApi() {
       .filter(Boolean)
       .join('\n');
 
-    const system = staticPrompt + '\n\n---\n\n# 동적 컨텍스트 (이번 턴)\n\n' + dynamicContext;
+    const system =
+      nowBlock + '\n\n---\n\n' + staticPrompt + '\n\n---\n\n# 동적 컨텍스트 (이번 턴)\n\n' + dynamicContext;
 
     // ─────────────────────────────────────────────────────────
     //  Tool 정의 — 카드 첨부를 모델이 결정
