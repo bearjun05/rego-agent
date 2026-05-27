@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { HomeChat } from './HomeChat';
-import { LAYOUTS } from '@/lib/layouts';
 
 /**
  * 레이아웃별로 홈 화면 구조를 바꾸는 클라이언트 셸.
@@ -23,11 +22,8 @@ export function HomeShell() {
     return () => obs.disconnect();
   }, []);
 
-  const def = LAYOUTS.find((l) => l.id === layout) ?? LAYOUTS[0]!;
-
   return (
     <>
-      <LayoutBadge name={def.name} vibe={def.vibe} id={def.id} />
       {layout === 'classic' && <ClassicLayout />}
       {layout === 'rail-right' && <RailRightLayout />}
       {layout === 'bento' && <BentoLayout />}
@@ -42,22 +38,12 @@ export function HomeShell() {
   );
 }
 
-function LayoutBadge({ name, vibe, id }: { name: string; vibe: string; id: string }) {
-  return (
-    <div className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase text-muted">
-      <span className="px-2 py-0.5 border-2 border-ink bg-paper">{name}</span>
-      <span className="hidden sm:inline">— {vibe}</span>
-      <span className="text-ink/40 ml-auto">data-layout="{id}"</span>
-    </div>
-  );
-}
-
 /* ───────────────────────── 1. CLASSIC (기본) ───────────────────────── */
 function ClassicLayout() {
   return (
     <div className="max-w-[1100px] mx-auto pt-4">
       <Hero compact={false} />
-      <section className="mb-12">
+      <section className="mb-6">
         <HomeChat />
       </section>
       <MonitorTile />

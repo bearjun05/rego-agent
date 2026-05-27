@@ -81,8 +81,11 @@ export function BingoBoard({
 
   return (
     <div className="brut p-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-display font-bold text-sm">🧱 빙고판</span>
+      <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-ink/15">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Bingo</div>
+          <div className="font-display font-bold text-sm leading-tight">9칸 미션</div>
+        </div>
         <div className="flex items-center gap-2">
           <div className="brick-row" aria-hidden>
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
@@ -92,7 +95,7 @@ export function BingoBoard({
               />
             ))}
           </div>
-          <span className="font-mono text-[10px] text-muted">{doneCount}/9</span>
+          <span className="font-mono text-[10px] text-muted tabular-nums">{doneCount}/9</span>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-1 stagger">
@@ -104,18 +107,16 @@ export function BingoBoard({
             <button
               key={def.id}
               onClick={(e) => {
-                // 작은 pop 애니메이션 살짝
                 const el = e.currentTarget;
                 el.classList.add('cell-pop');
                 setTimeout(() => el.classList.remove('cell-pop'), 220);
                 onCellClick(def, status);
               }}
-              className={`bingo-cell aspect-square p-2 border-brick border-line text-left relative overflow-hidden ${
+              className={`bingo-cell aspect-square p-2 border-brick border-line text-left relative overflow-hidden flex flex-col justify-between ${
                 done ? 'bg-warm text-paper brick' : 'bg-paper hover:bg-sand'
               } ${isPopping ? 'snap-in' : ''}`}
               style={{ borderRadius: 'var(--th-card-radius, 0)' }}
             >
-              {/* stud */}
               <span
                 aria-hidden
                 className="absolute top-1.5 right-1.5 rounded-full"
@@ -125,10 +126,12 @@ export function BingoBoard({
                   background: done ? 'var(--th-bg)' : 'color-mix(in srgb, var(--th-fg) 18%, transparent)',
                 }}
               />
-              {/* confetti — 갓 done된 셀 */}
               {isPopping && <Confetti />}
-              <div className="font-mono text-[10px] opacity-70 mb-0.5">
-                {def.id}. {done ? '✓' : '○'}
+              <div
+                className="font-display font-extrabold tabular-nums leading-none"
+                style={{ fontSize: 22, opacity: done ? 0.55 : 0.35 }}
+              >
+                {String(def.id).padStart(2, '0')}
               </div>
               <div className="font-display font-bold text-[11px] leading-tight">
                 {def.short}

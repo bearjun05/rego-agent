@@ -24,14 +24,12 @@ export function BingoSidePanel({
   refreshKey?: number;
 }) {
   return (
-    <div className="grid grid-rows-[2fr_1fr] gap-3 h-full">
-      <div className="overflow-hidden">
-        <BingoBoard
-          agentSlug={agentSlug}
-          onCellClick={onCellExplain}
-          refreshKey={refreshKey}
-        />
-      </div>
+    <div className="flex flex-col gap-3">
+      <BingoBoard
+        agentSlug={agentSlug}
+        onCellClick={onCellExplain}
+        refreshKey={refreshKey}
+      />
       <MiniLeaderboard agentSlug={agentSlug} />
     </div>
   );
@@ -66,27 +64,31 @@ function MiniLeaderboard({ agentSlug }: { agentSlug: string }) {
       className="brut p-3 hover:bg-sand transition-colors flex flex-col gap-1.5"
       title="클릭 → 16명 진행률 전체 대시보드"
     >
-      <div className="flex items-center justify-between">
-        <span className="font-display font-bold text-xs">🏆 실시간 순위</span>
+      <div className="flex items-center justify-between pb-1.5 border-b border-ink/15">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">실시간 순위</span>
         <span className="font-mono text-[9px] text-muted">
-          {myIdx >= 0 ? `내 순위: ${myIdx + 1}위` : '—'} · 전체 보기 →
+          {myIdx >= 0 ? `${myIdx + 1}위` : '—'} · 전체 →
         </span>
       </div>
       <div className="space-y-1">
         {top.map((r, i) => {
           const isMe = r.name === agentSlug;
-          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
           return (
             <div
               key={r.name}
               className={`flex items-center gap-2 text-[11px] ${isMe ? 'font-bold' : ''}`}
             >
-              <span className="w-5 text-center">{medal}</span>
+              <span
+                className="w-5 text-center font-mono tabular-nums"
+                style={{ color: i < 3 ? 'var(--th-accent)' : 'var(--th-muted)' }}
+              >
+                {i + 1}
+              </span>
               <span className={`flex-1 truncate ${isMe ? 'text-rust' : ''}`}>
                 {r.displayName ?? r.name}
                 {isMe && ' (나)'}
               </span>
-              <span className="font-mono text-muted">{r.bingoDone}/9</span>
+              <span className="font-mono text-muted tabular-nums">{r.bingoDone}/9</span>
             </div>
           );
         })}

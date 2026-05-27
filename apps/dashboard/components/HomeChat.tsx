@@ -7,7 +7,7 @@ import { OAuthCard } from './OAuthCard';
 import { ReloadButton } from './ReloadButton';
 import { MonitorCard } from './MonitorCard';
 import { RevealModal } from './RevealModal';
-import { ThemePicker, detectThemeIntent, themeCategoryToIds, themeCategoryReason } from './ThemePicker';
+import { ThemePicker, themeCategoryToIds, themeCategoryReason } from './ThemePicker';
 import { weekLabel, weekLabelEn } from '@/lib/week';
 import { Markdown } from './Markdown';
 import { ChatCard, parseSegments } from './ChatCards';
@@ -19,78 +19,21 @@ type CardData =
   | { type: 'reload'; agentSlug: string }
   | { type: 'monitor' }
   | { type: 'theme-picker'; themeIds: string[]; reason: string }
-  | { type: 'open-bingo-panel' }; // 사이드 패널 열기 버튼 카드
+  | { type: 'open-bingo-panel' };
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   card?: CardData;
 }
-interface Person {
-  slug: string; // 폴더 slug (agent name) — 예: uj_choe
-  displayName: string; // 풀네임 — 예: 최웅준
-}
 
 const SESSION_KEY = 'rego-chat-session';
-const PROFILE_KEY = 'rego-user-profile'; // { slug, given, full }
+const PROFILE_KEY = 'rego-user-profile';
 const VERSION_KEY = 'rego-chat-version';
-const APP_VERSION = 'v3-2026-05-27-name-fix'; // 흐름 변경 시 올리기 → 옛 localStorage 자동 청소
+const APP_VERSION = 'v4-2026-05-27-bootstrap'; // bootstrap 흐름 전환 — 옛 정규식 캐시 자동 청소
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const typingDelay = (text: string) => Math.min(500 + text.length * 38, 2100);
-
-// 복성(두 글자 성) — 성씨 제거 시 예외 처리
-const DOUBLE_SURNAMES = ['황보', '선우', '남궁', '제갈', '사공', '독고', '서문', '동방'];
-function givenName(full: string): string {
-  const f = full.replace(/\s/g, '');
-  for (const s of DOUBLE_SURNAMES) if (f.startsWith(s) && f.length > 2) return f.slice(2);
-  return f.length > 1 ? f.slice(1) : f;
-}
-
-// 입력한 이름을 하드코딩된 사용자(roster)와 매칭
-function matchPerson(input: string, roster: Person[]): Person | null {
-  const q = input.replace(/\s/g, '');
-  if (!q) return null;
-  return (
-    roster.find((r) => r.displayName.replace(/\s/g, '') === q) ??
-    roster.find((r) => givenName(r.displayName) === q) ??
-    roster.find((r) => r.displayName.replace(/\s/g, '').endsWith(q)) ??
-    roster.find((r) => q.includes(r.displayName.replace(/\s/g, ''))) ??
-    null
-  );
-}
-
-// "안녕"·"하이"·"ㅎㅇ" 같은 일반 인사 표현 — 이름으로 받아들이지 말 것
-const GREETING_WORDS = new Set([
-  '안녕', '하이', '하잉', '헬로', '여보세요', '오', '응', '엉', '예', '네',
-  'hi', 'hello', 'hey', 'yo', 'ㅎㅇ', 'ㅎㅎ', 'ㅋㅋ', 'ㅠㅠ', 'ㄱㄱ', 'ㅇㅋ',
-]);
-function looksLikeGreeting(text: string): boolean {
-  const clean = text.replace(/[ㅋㅎ\s.,!?~ㅜㅠ]/g, '').toLowerCase();
-  if (clean.length === 0) return true;
-  if (clean.length === 1) return true; // 한 글자는 이름 아님
-  return GREETING_WORDS.has(clean);
-}
-
-/**
- * 채팅 중 이름 정정 의도 감지.
- * "내 이름은 웅준" / "사실 웅준이야" / "웅준이라고 불러줘" / "정정 웅준" 등.
- * 매칭된 이름 후보를 반환 (없으면 null).
- */
-function detectNameUpdate(content: string): string | null {
-  const patterns = [
-    /(?:내\s*이름은?|나는?|저는|난|이름\s*은)\s*([가-힣A-Za-z]{2,8})\s*(?:이?야|입니다|에요|예요|이?에요)?/,
-    /([가-힣A-Za-z]{2,8})\s*(?:라고\s*)?(?:불러줘|불러주세요)/,
-    /(?:사실|아\s*맞다|정정|바꿔|변경)\s*(?:은)?\s*([가-힣A-Za-z]{2,8})/,
-    /이름\s*(?:정정|바꿔|변경|수정)\s*([가-힣A-Za-z]{2,8})/,
-  ];
-  for (const p of patterns) {
-    const m = content.match(p);
-    const candidate = m?.[1];
-    if (candidate && !GREETING_WORDS.has(candidate.toLowerCase())) return candidate;
-  }
-  return null;
-}
 
 // 2문장 초과 텍스트를 여러 메시지로 분할. 줄바꿈 블록(목록 등)은 통째로 유지.
 function splitChunks(text: string, maxSentences = 2): string[] {
@@ -109,11 +52,10 @@ function splitChunks(text: string, maxSentences = 2): string[] {
   return chunks.filter(Boolean);
 }
 
-// 이름을 받기 전 가벼운 인사만 스크립트로 (즉시 표시). 이후 온보딩·Q&A는 전부 LLM이 생성.
+// 이름 받기 전 즉시 인사. 이후 매칭/환영은 전부 서버 LLM (/bootstrap)이 처리.
 const greetingScript = [
   '안녕하세요! 저는 인솔이예요 🐱',
-  '이름이 뭐예요?',
-  '이름 알려주면 오늘 뭐 할지 알려줄게요!',
+  '이름이 뭐예요? (예: "최웅준" 또는 그냥 "웅준")',
 ];
 
 const SUGGESTIONS = ['답장 자동으로 하려면?', '버튼 메시지 어떻게 만들어?', '내 폴더 어디서 시작해?'];
@@ -126,32 +68,27 @@ export function HomeChat() {
   const [given, setGiven] = useState<string | null>(null);
   const [slug, setSlug] = useState<string | null>(null);
   const [stage, setStage] = useState<'askName' | 'chatting'>('askName');
-  /** 빙고 셀 자동 재조회 트리거 (검증/적용 후 ++) */
   const [bingoRefreshKey, setBingoRefreshKey] = useState(0);
-  /** 현재 학습자가 채팅 입력으로 풀어야 할 셀 (활성 시 입력 = claim) */
   const [activeMissionCell, setActiveMissionCell] = useState<CellDef | null>(null);
 
-  /** 마지막 인터랙션 (사용자 입력 / 시스템 자동 메시지) 타임스탬프 — 막힘 감지용 */
   const lastActivityRef = useRef<number>(Date.now());
-  /** 직전 빙고 상태 캐시 — 변화 감지로 축하 메시지 띄움 */
   const prevCellsRef = useRef<Record<number, 'done' | 'pending'> | null>(null);
-  /** 첫 진입에서 monitor 카드 표시 여부 */
-  const monitorShownRef = useRef(false);
-  /** 빙고 6+ 리빌 모달 (한 번만) */
   const [revealOpen, setRevealOpen] = useState(false);
   const revealShownRef = useRef(false);
-  /** 오른쪽 빙고 사이드 패널 표시 여부 */
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
-  /** 미션 완성 풀스크린 confetti 트리거 (verifyCell 성공 시 ++) */
   const [celebFire, setCelebFire] = useState(0);
 
-  const rosterRef = useRef<Person[]>([]);
   const sessionRef = useRef<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
+  /** 막힘 알림 한 번 보냈는지 — 사용자 입력 들어올 때까지 재발송 X */
+  const stuckSentRef = useRef(false);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    // 페이지 전체 스크롤로 마지막 메시지가 보이게 — 채팅 박스 내부 스크롤 X
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    });
   }, [messages, typing]);
 
   const typeOut = async (chunks: string[]) => {
@@ -164,7 +101,6 @@ export function HomeChat() {
     }
   };
 
-  // 사용자별 세션으로 이전 로그 복원
   const loadHistory = async (sid: string) => {
     try {
       const res = await fetch(`/api/runtime/chat/history?sessionId=${encodeURIComponent(sid)}`);
@@ -172,6 +108,76 @@ export function HomeChat() {
       if (data.messages?.length) setMessages(data.messages);
     } catch {
       /* ignore */
+    }
+  };
+
+  /**
+   * 서버 LLM에 첫 인사(또는 호칭 변경) 위임 — roster 매칭 + 환영 멘트 LLM이 결정.
+   * 정규식 매칭 없음. LLM이 ask_again 호출하면 stage=askName 유지.
+   */
+  const callBootstrap = async (text: string) => {
+    setBusy(true);
+    setTyping(true); // 부트스트랩도 네트워크 대기 — 입력 즉시 typing 표시
+    try {
+      const sid = sessionRef.current || `pending-${Date.now()}`;
+      sessionRef.current = sid;
+      const res = await fetch('/api/runtime/chat/bootstrap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: sid, message: text }),
+      });
+      const data = (await res.json()) as {
+        identified?: 'learner' | 'guest' | 'none';
+        slug?: string | null;
+        callName?: string | null;
+        welcomeMessage?: string;
+        error?: string;
+      };
+      if (data.error) {
+        await typeOut([`⚠ ${data.error}`]);
+        return;
+      }
+
+      const ident = data.identified ?? 'none';
+      const callName = data.callName ?? null;
+      const newSlug = data.slug ?? null;
+      const welcome = data.welcomeMessage ?? '';
+
+      if (ident === 'learner' && newSlug) {
+        setSlug(newSlug);
+        setGiven(callName);
+        setStage('chatting');
+        sessionRef.current = `user-${newSlug}`;
+        try {
+          localStorage.setItem(
+            PROFILE_KEY,
+            JSON.stringify({ slug: newSlug, given: callName, full: callName }),
+          );
+          localStorage.setItem(SESSION_KEY, `user-${newSlug}`);
+        } catch {}
+        if (welcome) await typeOut(splitChunks(welcome));
+        // 빙고 패널 자동 열기
+        setMessages((m) => [
+          ...m,
+          { role: 'assistant', content: '', card: { type: 'open-bingo-panel' } },
+        ]);
+        setSidePanelOpen(true);
+      } else if (ident === 'guest') {
+        setGiven(callName);
+        setSlug(null);
+        setStage('chatting');
+        // 게스트는 PROFILE_KEY 저장 X — 다음 방문 때 다시 묻기 위함
+        try { localStorage.setItem(SESSION_KEY, sid); } catch {}
+        if (welcome) await typeOut(splitChunks(welcome));
+      } else {
+        // ask_again — stage=askName 유지, 환영 멘트만
+        if (welcome) await typeOut(splitChunks(welcome));
+      }
+    } catch (err) {
+      await typeOut([`⚠ ${err instanceof Error ? err.message : String(err)}`]);
+    } finally {
+      setTyping(false);
+      setBusy(false);
     }
   };
 
@@ -184,53 +190,36 @@ export function HomeChat() {
       try {
         const savedVer = localStorage.getItem(VERSION_KEY);
         if (savedVer !== APP_VERSION) {
-          // 옛 버전 → PROFILE_KEY/SESSION_KEY 청소 (재진입자 새 흐름 강제)
           localStorage.removeItem(PROFILE_KEY);
           localStorage.removeItem(SESSION_KEY);
           localStorage.setItem(VERSION_KEY, APP_VERSION);
         }
       } catch {}
 
-      // roster (하드코딩된 사용자 목록) 로드
-      try {
-        const res = await fetch('/api/runtime/agents');
-        const data = (await res.json()) as { agents?: Array<{ name: string; displayName: string | null }> };
-        rosterRef.current = (data.agents ?? [])
-          .filter((a) => a.displayName && a.name !== '_template')
-          .map((a) => ({ slug: a.name, displayName: a.displayName as string }));
-      } catch {
-        /* ignore — 매칭 없이 진행 */
-      }
-
-      // 이전 방문 프로필 있으면 새 인사 흐름으로 (옛 "다시 왔네요" 제거)
+      // 이전 방문 프로필 복원 (학습자만 저장됨, 게스트는 매번 새로)
       const saved = typeof window !== 'undefined' ? localStorage.getItem(PROFILE_KEY) : null;
       if (saved) {
         try {
           const p = JSON.parse(saved) as { slug: string | null; given: string };
-          setGiven(p.given);
-          setSlug(p.slug);
-          setStage('chatting');
-          sessionRef.current = p.slug ? `user-${p.slug}` : localStorage.getItem(SESSION_KEY) ?? `anon-${Date.now()}`;
-          await loadHistory(sessionRef.current);
-
-          if (p.slug) {
-            // 매칭된 학습자 — 첫 진입과 동일한 4줄 인사 (일관성)
+          if (p.slug && p.given) {
+            setGiven(p.given);
+            setSlug(p.slug);
+            setStage('chatting');
+            sessionRef.current = `user-${p.slug}`;
+            await loadHistory(sessionRef.current);
             await typeOut([
               `다시 왔네요, ${p.given}님! 👋`,
-              '오늘은 **2주차** — 저번 주 이어서 슬랙 멘션을 텔레그램으로 받고, 메시지를 예쁘게 가공하는 게 목표예요.',
+              `오늘은 **${weekLabel()}** — 저번 주 이어서 슬랙 멘션을 텔레그램으로 받는 거예요.`,
               '오른쪽에 빙고판 + 실시간 순위 띄워둘게요. 막히는 거 있으면 바로 물어봐요!',
             ]);
             setMessages((m) => [
               ...m,
               { role: 'assistant', content: '', card: { type: 'open-bingo-panel' } },
             ]);
-            setSidePanelOpen(true); // 자동 열기
-          } else {
-            // 매칭 안 된 익명 — 짧은 인사
-            await typeOut([`다시 왔네요, ${p.given}님! 👋`, '오늘 막힌 거 있으면 바로 물어봐요.']);
+            setSidePanelOpen(true);
+            setBusy(false);
+            return;
           }
-          setBusy(false);
-          return;
         } catch {
           /* fallthrough */
         }
@@ -242,13 +231,12 @@ export function HomeChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 인솔이가 능동으로 메시지 추가하는 헬퍼 (활동 시각 갱신)
   const insolMessage = (content: string, card?: CardData) => {
     setMessages((m) => [...m, { role: 'assistant', content, card }]);
     lastActivityRef.current = Date.now();
   };
 
-  // SSE 구독 — 본인 agentName 이벤트 받으면 인솔이가 능동 반응
+  // SSE 구독
   useEffect(() => {
     if (!slug) return;
     const es = new EventSource('/api/runtime-events');
@@ -279,7 +267,7 @@ export function HomeChat() {
         }
         if (msg) {
           insolMessage(msg);
-          setBingoRefreshKey((k) => k + 1); // 빙고판 즉시 재조회
+          setBingoRefreshKey((k) => k + 1);
         }
       } catch {}
     };
@@ -304,7 +292,7 @@ export function HomeChat() {
     };
   }, [slug]);
 
-  // 빙고 상태 변화 감지 — 새로 done된 셀 있으면 축하 + 다음 셀 추천 + 6+에서 리빌
+  // 빙고 상태 변화 감지
   const checkBingoProgress = async () => {
     if (!slug) return;
     try {
@@ -318,29 +306,24 @@ export function HomeChat() {
           .filter(([id, s]) => s === 'done' && prev[Number(id)] !== 'done')
           .map(([id]) => Number(id));
         for (const id of newlyDone) {
-          insolMessage(`🎉 셀 ${id} 클리어!`);
+          insolMessage(`🎉 ${id}번 빙고 클리어!`);
         }
         const doneCount = Object.values(current).filter((s) => s === 'done').length;
-        // 6+ 도달 시 리빌 (한 번만)
         if (doneCount >= 6 && !revealShownRef.current) {
           revealShownRef.current = true;
           setTimeout(() => setRevealOpen(true), 1000);
         }
-        // 다음 셀 추천
         if (newlyDone.length > 0) {
-          const nextPending = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((n) => current[n] !== 'done');
-          if (nextPending) {
-            if (doneCount === 9) {
-              insolMessage('🏁 빙고 9개 완주! 진짜 수고하셨어요. 잠시 쉬다 와요 ☕');
-            } else {
-              insolMessage(
-                `이제 ${doneCount}/9 — 다음은 셀 ${nextPending}을 풀어볼까요? 빙고판에서 클릭하면 안내해드릴게요.`,
-              );
-            }
+          if (doneCount === 9) {
+            insolMessage('🏁 빙고 9개 완주! 진짜 수고하셨어요. 잠깐 쉬어가도 좋겠어요 ☕');
+          } else {
+            // 사용자에게 다음 결정권을 줌 — 능동성 유발.
+            insolMessage(
+              `${doneCount}/9. 이어서 빙고 한 칸 더 풀어볼래요, 아니면 본인 에이전트에 새 기능 하나 더 붙여볼래요? 원하는 방향 말해주면 같이 가볼게요.`,
+            );
           }
         }
       } else {
-        // 첫 로드 — 이미 6+면 즉시 리빌 마킹 (재진입은 모달 안 띄움)
         const doneCount = Object.values(current).filter((s) => s === 'done').length;
         if (doneCount >= 6) revealShownRef.current = true;
       }
@@ -353,22 +336,20 @@ export function HomeChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bingoRefreshKey, slug]);
 
-  // 막힘 감지 — N분 진전 없으면 인솔이가 먼저 도움 제안
+  // 막힘 감지
   useEffect(() => {
     if (!slug || stage !== 'chatting') return;
     const STUCK_AFTER_MS = 3 * 60 * 1000;
     const interval = setInterval(() => {
       const since = Date.now() - lastActivityRef.current;
-      if (since > STUCK_AFTER_MS && !busy && !typing) {
-        insolMessage('혹시 어디서 막혔어요? 빙고 한 칸 클릭해서 안내문 다시 보거나, 어떤 부분이 헷갈리는지 적어주시면 도와드릴게요. 🐱');
-        lastActivityRef.current = Date.now(); // 한 번 보내면 리셋
+      if (since > STUCK_AFTER_MS && !busy && !typing && !stuckSentRef.current) {
+        insolMessage('혹시 어디서 막혔어요? 빙고 한 칸 클릭해서 안내문 다시 보거나, 어떤 부분이 헷갈리는지 적어주시면 같이 풀어볼게요 🐱');
+        stuckSentRef.current = true; // 사용자 입력 전까지 재발송 X
       }
-    }, 60 * 1000); // 1분 단위 체크
+    }, 60 * 1000);
     return () => clearInterval(interval);
   }, [slug, stage, busy, typing]);
 
-  // 셀 클릭 → 미션 카드를 메시지로 띄움. 자동 검증 셀이면 즉시 verify 시도.
-  // + 인솔이가 셀별 코드 스니펫 자동 안내 (cell-guide API)
   const handleBingoCellClick = async (cell: CellDef, status: CellStatus) => {
     if (status === 'done') {
       setMessages((m) => [
@@ -384,24 +365,18 @@ export function HomeChat() {
     if (cell.method === 'chat_input') {
       setActiveMissionCell(cell);
     } else if (slug) {
-      // 자동 코칭 — 학습자 코드 상태에 맞춘 안내 + 코드 스니펫
+      // 스니펫(복붙용 코드)은 일부러 안 보냄 — 본인이 클로드코드로 직접 깎게 한다.
+      // 다음 한 줄(방향성) 만 안내.
       try {
         const res = await fetch(
           `/api/runtime/insol/cell-guide?cell=${cell.id}&agent=${encodeURIComponent(slug)}`,
         );
-        const guide = (await res.json()) as { nextStep?: string; snippet?: string };
-        if (guide.snippet) {
-          insolMessage(
-            `다음 한 줄: ${guide.nextStep}\n\n복붙용 스니펫:\n\`\`\`ts\n${guide.snippet}\n\`\`\``,
-          );
-        } else if (guide.nextStep) {
-          insolMessage(guide.nextStep);
-        }
+        const guide = (await res.json()) as { nextStep?: string };
+        if (guide.nextStep) insolMessage(guide.nextStep);
       } catch {}
     }
   };
 
-  // 개별 셀 검증 (자동 검증 셀에서 "검증하기" 버튼)
   const verifyCell = async (cell: CellDef | null) => {
     if (!cell || !slug) return;
     setBusy(true);
@@ -421,8 +396,7 @@ export function HomeChat() {
           },
         ]);
         setBingoRefreshKey((k) => k + 1);
-        setCelebFire((n) => n + 1); // 풀스크린 confetti 발동
-        // 사이드 패널 자동 열기 (안 열렸으면 — 빙고판 확인하도록)
+        setCelebFire((n) => n + 1);
         setSidePanelOpen(true);
       } else {
         setMessages((m) => [
@@ -443,7 +417,6 @@ export function HomeChat() {
     }
   };
 
-  // 채팅 입력 셀 클레임 (텍스트 저장)
   const claimChatCell = async (cell: CellDef, text: string) => {
     if (!slug) return;
     setBusy(true);
@@ -482,9 +455,10 @@ export function HomeChat() {
     }
   };
 
-  // 실제 LLM 코치 호출 — actions[]도 받아서 카드 렌더 (tool calling 결과)
+  /** 메인 LLM 코치 — 도구 호출 결과(actions[])도 받아서 카드/이름변경 처리 */
   const askCoach = async (message: string, sid: string, s: string | null, g: string | null) => {
     setBusy(true);
+    setTyping(true); // 사용자가 입력하자마자 typing dots 즉시 표시 (fetch 대기 동안 유지)
     try {
       const res = await fetch('/api/runtime/chat/send', {
         method: 'POST',
@@ -498,16 +472,44 @@ export function HomeChat() {
       });
       const data = (await res.json()) as {
         answer?: string;
-        actions?: Array<{ type: string; category?: string; agentSlug?: string }>;
+        actions?: Array<{ type: string; [k: string]: unknown }>;
         error?: string;
       };
+      setTyping(false); // typeOut이 청크별로 다시 setTyping 함
       if (data.answer) {
         await typeOut(splitChunks(data.answer));
       } else if (data.error) {
         await typeOut([`⚠ ${data.error}`]);
       }
-      // LLM이 결정한 액션 → 카드 렌더
       for (const a of data.actions ?? []) {
+        // update-name: 사이드 이펙트 (카드 아님)
+        if (a.type === 'update-name') {
+          const newName = String(a.newCallName ?? '').trim();
+          const newSlug = a.slug ? String(a.slug).trim() : '';
+          if (!newName) continue;
+          setGiven(newName);
+          if (newSlug) {
+            setSlug(newSlug);
+            sessionRef.current = `user-${newSlug}`;
+            try {
+              localStorage.setItem(
+                PROFILE_KEY,
+                JSON.stringify({ slug: newSlug, given: newName, full: newName }),
+              );
+            } catch {}
+          } else {
+            try {
+              const cur = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? '{}');
+              if (cur.slug) {
+                localStorage.setItem(
+                  PROFILE_KEY,
+                  JSON.stringify({ ...cur, given: newName }),
+                );
+              }
+            } catch {}
+          }
+          continue;
+        }
         const card = actionToCard(a, s);
         if (card) {
           setMessages((m) => [...m, { role: 'assistant', content: '', card }]);
@@ -516,30 +518,29 @@ export function HomeChat() {
     } catch (err) {
       await typeOut([`⚠ ${err instanceof Error ? err.message : String(err)}`]);
     } finally {
+      setTyping(false);
       setBusy(false);
     }
   };
 
-  // 서버에서 받은 action → 클라이언트 카드 데이터로 매핑
   const actionToCard = (
-    a: { type: string; category?: string; agentSlug?: string },
+    a: { type: string; [k: string]: unknown },
     fallbackSlug: string | null,
   ): CardData | null => {
-    const slug = a.agentSlug ?? fallbackSlug;
+    const agentSlug = (a.agentSlug as string | undefined) ?? fallbackSlug;
     switch (a.type) {
       case 'monitor':
         return { type: 'monitor' };
       case 'theme-picker': {
-        // 서버에서 category만 받으므로 클라이언트의 사전 매핑 사용
-        const ids = themeCategoryToIds(a.category ?? 'general');
-        return { type: 'theme-picker', themeIds: ids, reason: themeCategoryReason(a.category ?? 'general') };
+        const cat = (a.category as string | undefined) ?? 'general';
+        return { type: 'theme-picker', themeIds: themeCategoryToIds(cat), reason: themeCategoryReason(cat) };
       }
       case 'oauth':
-        return slug ? { type: 'oauth', agentSlug: slug } : null;
+        return agentSlug ? { type: 'oauth', agentSlug } : null;
       case 'reload':
-        return slug ? { type: 'reload', agentSlug: slug } : null;
+        return agentSlug ? { type: 'reload', agentSlug } : null;
       case 'bingo':
-        return slug ? { type: 'bingo', agentSlug: slug } : null;
+        return agentSlug ? { type: 'bingo', agentSlug } : null;
       default:
         return null;
     }
@@ -550,82 +551,19 @@ export function HomeChat() {
     if (!content || busy || typing) return;
     setInput('');
 
-    // 1) 이름 받기 → roster 매칭 → LLM이 온보딩 생성
+    // 1) 이름 받기 → 서버 /bootstrap (LLM 매칭 + 환영)
     if (stage === 'askName') {
       setMessages((m) => [...m, { role: 'user', content }]);
-      const cleaned =
-        content
-          .replace(/^(저는|제?\s*이름은|나는)\s*/i, '')
-          .replace(/(이에요|예요|입니다|이야|야|라고\s*해요?)\s*$/i, '')
-          .trim() || content;
-
-      // 일반 인사어 / 너무 짧은 입력은 이름으로 받아들이지 않음
-      if (looksLikeGreeting(cleaned)) {
-        await typeOut([
-          '안녕하세요! 🐱',
-          '근데 이름이 뭐예요? (예: "최웅준" 또는 그냥 "웅준")',
-        ]);
-        return; // 이름 단계 유지
-      }
-
-      const person = matchPerson(cleaned, rosterRef.current);
-      // roster에 없으면서 + 너무 짧으면 (한글 2자 미만) 한 번 더 확인
-      if (!person && cleaned.length < 2) {
-        await typeOut([
-          `"${cleaned}"…? 이름 맞아요?`,
-          '풀네임이나 이름 두 글자 이상으로 알려주시면 도와드릴게요.',
-        ]);
-        return;
-      }
-      const g = person ? givenName(person.displayName) : givenName(cleaned);
-      const s = person?.slug ?? null;
-      const sid = s ? `user-${s}` : localStorage.getItem(SESSION_KEY) ?? `anon-${Date.now()}`;
-
-      setGiven(g);
-      setSlug(s);
-      setStage('chatting');
-      sessionRef.current = sid;
-      if (!s) localStorage.setItem(SESSION_KEY, sid);
-      // 매칭된 학습자만 PROFILE 저장 (잘못 매칭된 이름이 새로고침마다 부활하는 거 방지)
-      if (s) {
-        localStorage.setItem(
-          PROFILE_KEY,
-          JSON.stringify({ slug: s, given: g, full: person!.displayName }),
-        );
-      }
-
-      if (s) {
-        // 매칭된 학습자 — 고정 스크립트로 환영
-        await typeOut([
-          `안녕하세요 ${g}님! 👋`,
-          '오늘은 **2주차**예요. 저번 주에 했던 거 이어서 진행할 건데, 오늘은 실제로 슬랙과 연결해서 멘션이 오면 텔레그램으로 받아볼 거예요.',
-          '그 메시지를 좀 더 예쁘게 가공하거나 여러 기능을 붙여서 — 실제로 내가 쓰는데 도움 되는 에이전트로 만들어보는 게 목표!',
-          `${g}님이 조금 더 재밌게 해볼 수 있게 **빙고**를 가지고 와봤어요. 순서는 자유! **3빙고**를 먼저 완성해보세요. 🎯`,
-        ]);
-        setMessages((m) => [
-          ...m,
-          { role: 'assistant', content: '', card: { type: 'open-bingo-panel' } },
-        ]);
-      } else {
-        // 매칭 안 됨 → 손님 모드: 스터디 소개 + 다른 사람 구경 유도
-        // (스터디는 중간 참여 불가. 구경·체험 위주로 안내)
-        await typeOut([
-          `반가워요 ${g}님! 🐱 학습자 명단에는 없는 이름인데, 놀러 오신 거예요?`,
-          '여기는 **인프피솔루션** — 팀스파르타 사내 스터디예요. 매주 수요일 12:30 운동장1에서 식사하며 진행해요.',
-          '"에이전트는 레고다"가 컨셉이에요. AI 모델 + 도구 + 규칙을 블록처럼 끼워서 본인 일 도와주는 AI 비서를 8주 동안 만들어가요.',
-          '저는 인솔이 — 학습자들 개인 페이스로 따라갈 수 있게 도와주는 교육 에이전트예요.',
-          '아쉽게도 스터디는 중간 참여가 안 돼요. 대신 **다른 분들 뭐 하고 있는지** 한번 살펴보실래요? "다른 사람들 뭐해?"라고 물어보시면 바로 보여드릴게요. 🎯',
-        ]);
-      }
+      await callBootstrap(content);
       return;
     }
 
-    lastActivityRef.current = Date.now(); // 사용자 입력 = 활동
+    lastActivityRef.current = Date.now();
+    stuckSentRef.current = false; // 사용자 입력 = 막힘 알림 다시 켜기
 
-    // PAT 자동 감지 + 제출 (사용자 메시지에 토큰 패턴 있으면)
+    // PAT 자동 감지 + 제출
     const patMatch = content.match(/(github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9_]+)/);
     if (patMatch && slug) {
-      // 토큰 마스킹해서 user 메시지 표시 (히스토리에 평문 안 남기게)
       const masked = patMatch[1]!.slice(0, 14) + '…' + patMatch[1]!.slice(-4);
       setMessages((m) => [...m, { role: 'user', content: content.replace(patMatch[1]!, masked) }]);
       try {
@@ -653,47 +591,7 @@ export function HomeChat() {
       return;
     }
 
-    // 1.5) 이름 정정 의도 자동 감지 — "내 이름은 OO" / "OO이야" 같은 표현
-    const newNameRaw = detectNameUpdate(content);
-    if (newNameRaw && newNameRaw !== given) {
-      setMessages((m) => [...m, { role: 'user', content }]);
-      const person = matchPerson(newNameRaw, rosterRef.current);
-      const newGiven = person ? givenName(person.displayName) : givenName(newNameRaw);
-      const newSlug = person?.slug ?? null;
-      setGiven(newGiven);
-      if (newSlug) {
-        setSlug(newSlug);
-        const newSid = `user-${newSlug}`;
-        sessionRef.current = newSid;
-        try {
-          localStorage.setItem(
-            PROFILE_KEY,
-            JSON.stringify({ slug: newSlug, given: newGiven, full: person!.displayName }),
-          );
-        } catch {}
-        await typeOut([
-          `아 ${newGiven}님이셨군요! 정정했어요 ✓`,
-          '이제 ' + newGiven + '님으로 부를게요.',
-        ]);
-        setSidePanelOpen(true);
-      } else {
-        // roster 매칭 안 됨 — 호칭만 바꾸고 localStorage 저장 X
-        try {
-          const cur = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? '{}');
-          if (cur.slug) {
-            // 매칭된 사용자가 호칭만 바꾸는 경우 — 호칭만 업데이트
-            localStorage.setItem(
-              PROFILE_KEY,
-              JSON.stringify({ ...cur, given: newGiven }),
-            );
-          }
-        } catch {}
-        await typeOut([`${newGiven}님이라고 부를게요. (학습자 명단엔 없는 이름이라 일부 기능 제한될 수 있어요)`]);
-      }
-      return;
-    }
-
-    // 2) 자유 대화 — 카드 결정은 서버 LLM tool calling이 함
+    // 자유 대화 — 이름 정정 의도는 서버 LLM이 update_call_name 도구로 처리
     setMessages((m) => [...m, { role: 'user', content }]);
     await askCoach(content, sessionRef.current, slug, given);
   };
@@ -712,11 +610,11 @@ export function HomeChat() {
         <RevealModal agentSlug={slug} onClose={() => setRevealOpen(false)} />
       )}
     <div
-      className={`grid gap-4 h-[68vh] min-h-[460px] max-h-[720px] transition-[grid-template-columns] duration-300 ${
+      className={`grid gap-4 transition-[grid-template-columns] duration-300 items-start ${
         sidePanelOpen && slug ? 'grid-cols-1 lg:grid-cols-[2fr_1fr]' : 'grid-cols-1'
       }`}
     >
-    <div className="brut bg-paper flex flex-col h-full overflow-hidden">
+    <div className="brut bg-paper flex flex-col min-h-[calc(100vh-220px)]">
       <div className="border-b-2 border-ink p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl leading-none">🐱</span>
@@ -726,33 +624,11 @@ export function HomeChat() {
               {given ? (
                 <>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       const next = window.prompt('호칭을 어떻게 부를까요? (예: 웅준)', given);
                       if (!next || !next.trim()) return;
-                      const trimmed = next.trim();
-                      const person = matchPerson(trimmed, rosterRef.current);
-                      const ng = person ? givenName(person.displayName) : givenName(trimmed);
-                      setGiven(ng);
-                      if (person) {
-                        setSlug(person.slug);
-                        sessionRef.current = `user-${person.slug}`;
-                        try {
-                          localStorage.setItem(
-                            PROFILE_KEY,
-                            JSON.stringify({ slug: person.slug, given: ng, full: person.displayName }),
-                          );
-                        } catch {}
-                      } else {
-                        try {
-                          const cur = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? '{}');
-                          if (cur.slug) {
-                            localStorage.setItem(
-                              PROFILE_KEY,
-                              JSON.stringify({ ...cur, given: ng }),
-                            );
-                          }
-                        } catch {}
-                      }
+                      // 서버 /bootstrap에 위임 — LLM이 매칭 + 호칭 결정
+                      await callBootstrap(`내 이름은 ${next.trim()}`);
                     }}
                     className="hover:text-rust transition-colors"
                     title="호칭 변경"
@@ -801,7 +677,7 @@ export function HomeChat() {
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={scrollRef} className="flex-1 p-4 space-y-3">
         {messages.map((m, i) => (
           <div key={i} className="space-y-2 msg-in">
             {m.content &&
@@ -831,25 +707,28 @@ export function HomeChat() {
                 )}
                 {m.card.type === 'mission' && (
                   <div className="brut p-3 bg-paper">
-                    <div className="font-display font-bold text-sm mb-1">
-                      🎯 {m.card.cell.id}. {m.card.cell.title}
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-muted">
+                      Mission · {String(m.card.cell.id).padStart(2, '0')}
+                    </div>
+                    <div className="font-display font-bold text-sm mb-2 leading-tight">
+                      {m.card.cell.title}
                     </div>
                     <div className="text-xs leading-relaxed mb-2">
                       <Markdown text={m.card.cell.description} />
                     </div>
                     <div className="font-mono text-[10px] text-muted bg-sand border-2 border-line p-2 mb-2">
-                      💡 <Markdown text={m.card.cell.hint} />
+                      <Markdown text={m.card.cell.hint} />
                     </div>
                     {m.card.cell.method === 'chat_input' ? (
                       <div className="font-mono text-[10px] text-muted">
-                        ↓ 아래 입력창에 답변을 적어주세요. (예: "1번 이모지, 2번..." )
+                        ↓ 아래 입력창에 답변을 적어주세요.
                       </div>
                     ) : (
                       <button
                         onClick={() => verifyCell(m.card && m.card.type === 'mission' ? m.card.cell : null)}
                         className="btn btn-primary text-xs"
                       >
-                        🎯 미션 완성하기!
+                        미션 완성하기 →
                       </button>
                     )}
                   </div>
@@ -875,10 +754,11 @@ export function HomeChat() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <div className="font-display font-bold text-sm mb-0.5">
-                          🧱 빙고판 열어보기
+                        <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Panel</div>
+                        <div className="font-display font-bold text-sm leading-tight">
+                          빙고판 열어보기
                         </div>
-                        <div className="font-mono text-[10px] text-muted">
+                        <div className="font-mono text-[10px] text-muted mt-0.5">
                           오른쪽에 9칸 빙고 + 실시간 16명 순위가 떠요
                         </div>
                       </div>
@@ -919,7 +799,7 @@ export function HomeChat() {
       </div>
 
       <form
-        className="border-t-2 border-ink p-3 flex gap-2"
+        className="border-t-2 border-ink p-3 flex gap-2 sticky bottom-0 bg-paper z-20"
         onSubmit={(e) => {
           e.preventDefault();
           handleSubmit();
@@ -943,9 +823,8 @@ export function HomeChat() {
         </button>
       </form>
     </div>
-    {/* 오른쪽 사이드 패널 — 빙고판 + 미니 순위판 */}
     {sidePanelOpen && slug && (
-      <div className="hidden lg:block h-full overflow-y-auto">
+      <div className="hidden lg:block lg:sticky lg:top-4 self-start">
         <div className="flex items-center justify-between mb-2">
           <span className="font-mono text-[10px] uppercase text-muted">사이드 패널</span>
           <button
@@ -953,7 +832,7 @@ export function HomeChat() {
             className="font-mono text-[10px] text-muted hover:text-ink"
             title="패널 접기"
           >
-            ✕ 접기
+            접기
           </button>
         </div>
         <BingoSidePanel
@@ -968,10 +847,6 @@ export function HomeChat() {
   );
 }
 
-/**
- * 인솔이 메시지 렌더러 — [[card:type {json}]] 토큰을 파싱해서
- * 텍스트는 버블, 카드는 별도 컴포넌트로 분리 렌더.
- */
 function AssistantMessage({ content }: { content: string }) {
   const segments = parseSegments(content);
   return (

@@ -67,7 +67,7 @@ export interface OpenRouterCallParams {
   baseUrl?: string;
   /** 도구 정의 — 모델이 자연어 의도 파악 후 호출 */
   tools?: ToolDef[];
-  toolChoice?: 'auto' | 'none' | { type: 'function'; function: { name: string } };
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
 }
 
 export interface OpenRouterResponse {

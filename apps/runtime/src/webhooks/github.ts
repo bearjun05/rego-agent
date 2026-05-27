@@ -7,13 +7,16 @@ import { getDb, agents } from '@rego/db';
 import { TelegramClient } from '@rego/tools/telegram';
 import { env } from '../env.js';
 import { createLogger } from '../logger.js';
-import { reloadAll, getAgentsRoot, getAgent } from '../agent-registry.js';
+import { reloadAll, reloadAgent, getAgentsRoot, getAgent } from '../agent-registry.js';
 import { refreshSlackUserMap } from '../agent-runner.js';
 import { getEventBus } from '../event-bus.js';
 import { syncManifestToolsForAgent, ensureAgentRow } from '../manifest-sync.js';
 import { listAgents } from '../agent-registry.js';
 import { analyzeAgent } from '../analyzer.js';
 import { audit } from '../audit.js';
+import { fetchLearnerFolder, agentFolderExists, isSafeAgentName } from '../git-sync.js';
+import { bindCronTriggers } from '../agent-cron-bind.js';
+import { getCronScheduler } from '../cron-scheduler.js';
 
 const log = createLogger('webhook:github');
 const execAsync = promisify(exec);
@@ -135,6 +138,63 @@ async function syncAgentsFromGit(): Promise<{ changed: Set<string>; commit: stri
   }
 }
 
+/**
+ * 학습자 브랜치 push → 그 슬러그 폴더만 부분 reload.
+ * api/agents/:name/reload(doHotReload)와 동일한 단계지만 webhook 컨텍스트에서.
+ * SSE `agent.reloaded` 이벤트로 인솔이가 "코드 적용됐어요" 능동 반응 가능.
+ */
+async function reloadLearnerFromPush(slug: string, commitSha?: string): Promise<void> {
+  if (!isSafeAgentName(slug)) {
+    log.warn(`unsafe learner slug, skipping reload: ${slug}`);
+    return;
+  }
+  try {
+    // 1) 옛 cron 트리거 해제
+    getCronScheduler().cancelAgent(slug);
+
+    // 2) 학습자 브랜치에서 폴더 부분 checkout
+    const { sha, branch } = await fetchLearnerFolder(slug);
+
+    if (!agentFolderExists(slug)) {
+      log.warn(`learner push reload: agents/${slug}/ not found after checkout`);
+      return;
+    }
+
+    // 3) 모듈 reload
+    const agent = await reloadAgent(slug);
+    if (!agent) {
+      log.warn(`learner push reload: agent not found after reload: ${slug}`);
+      return;
+    }
+
+    // 4) cron 재등록
+    const cronCount = bindCronTriggers(agent);
+
+    // 5) DB row + 매핑 동기 + 변경분 AI 분석
+    try {
+      await ensureAgentRow(agent);
+      await syncManifestToolsForAgent(agent);
+      await refreshSlackUserMap();
+      await analyzeAgent(agent, commitSha ?? sha);
+    } catch (err) {
+      log.warn(`post-reload sync warn for ${slug}`, err);
+    }
+
+    log.info(`learner push reload OK: ${slug} @ ${sha.slice(0, 8)} (${cronCount} cron)`);
+
+    // 인솔이 능동 반응 — "코드 적용됐어요"
+    await getEventBus()
+      .publish({
+        type: 'agent.reloaded',
+        agentName: slug,
+        payload: { sha, branch, cronCount, source: 'webhook' },
+      })
+      .catch(() => {});
+  } catch (err) {
+    log.error(`learner push reload failed for ${slug}`, err);
+  }
+}
+
 async function verifyGitHubSignature(secret: string, signature: string, body: string) {
   if (!signature) return false;
   const enc = new TextEncoder();
@@ -193,6 +253,12 @@ export function createGithubRouter() {
         },
       });
 
+      // 학습자 브랜치(learner/<slug>) push면 그 폴더만 부분 reload
+      // 일반 브랜치(보통 main)는 기존 흐름대로 agents/ 전체 동기화
+      const learnerMatch = payload.ref?.match(/^refs\/heads\/learner\/([a-z][a-z0-9_-]{0,29})$/);
+      const isLearnerPush = !!learnerMatch;
+      const learnerSlug = learnerMatch?.[1] ?? null;
+
       // 0) 폴더 경계 검증 (본인 폴더 밖 수정 시 텔레그램 경고 + audit) — 항상 수행
       queueMicrotask(async () => {
         try {
@@ -209,7 +275,13 @@ export function createGithubRouter() {
           return;
         }
 
-        // 자체서버: git에서 agents/ 동기화 → reload → DB sync → 변경분 AI 분석
+        if (isLearnerPush && learnerSlug) {
+          // 학습자 브랜치 push — 그 슬러그만 부분 동기화 + reload
+          await reloadLearnerFromPush(learnerSlug, payload.commits?.[payload.commits.length - 1]?.id);
+          return;
+        }
+
+        // 일반 푸시(main 등): git에서 agents/ 전체 동기화 → reload → DB sync → 변경분 AI 분석
         try {
           const { changed, commit } = await syncAgentsFromGit();
           await reloadAll();

@@ -104,7 +104,7 @@ function CardShell({
           style={{ background: tone, boxShadow: `0 0 0 3px color-mix(in srgb, ${tone} 30%, transparent)` }}
         />
         <span className="font-mono text-[9px] uppercase tracking-widest text-muted">
-          {kind} · 인솔이가 생성한 카드
+          {kind}
         </span>
       </div>
       <div className="p-3">{children}</div>
