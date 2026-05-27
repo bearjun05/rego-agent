@@ -155,18 +155,15 @@ async function handleSlackEvent(
     raw: payload,
   };
 
-  // user-scoped events: authorizations[0].user_id == 이 이벤트가 그 학습자 시야에서
-  //   발생했음을 알려줌(그 학습자가 앱을 OAuth로 설치했기 때문에 이벤트가 옴).
-  //   → 그 학습자의 agent로만 라우팅. cross-routing 원천차단.
-  // 레거시 forward(second-brain → rego) 경로는 authorizations 없음 → restrict 미지정.
-  const authedUserId = payload.authorizations?.[0]?.user_id;
-
-  // 저장(dedup: channel+ts) + 매칭 에이전트 실행.
+  // ※ authorizations[0].user_id 로 restrict 하지 않음.
+  // 실제 운영 환경에서 이 필드는 항상 운영자(앱 설치자) user_id 가 들어와서
+  // 멘션된 본인이 누구든 운영자로만 라우팅이 좁혀지는 문제 발생.
+  // → 텍스트의 <@U...> 패턴 매칭으로 멘션된 본인에게 정확히 라우팅 (matchAgentsForEvent 가 ownMentionsOnly 분기에서 처리).
+  // (Tier2 폴링은 slack-poller 에서 별도로 restrictToSlackUserId 를 토큰 주인으로 명시함)
   await ingestSlackMention(agentEvent, {
     source: 'forward',
     eventId: payload.event_id ?? null,
     teamId: payload.team_id,
     raw: payload,
-    restrictToSlackUserId: authedUserId,
   });
 }
