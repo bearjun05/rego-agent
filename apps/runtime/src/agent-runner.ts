@@ -512,10 +512,11 @@ export async function runAgentForEvent(
       const out = tc.output as { messageId?: number } | null;
       const input = tc.input as { text?: string; chatId?: string } | null;
       if (input?.text) {
+        // 도구 자체에서 chatId override를 무시하므로 DB 기록도 본인 chat_id로 강제.
         await db.insert(telegramMessages).values({
           runId,
           agentName: agent.name,
-          chatId: input.chatId ?? (row?.telegramChatId ?? ''),
+          chatId: row?.telegramChatId ?? '',
           text: input.text,
           payload: tc.input ?? null,
           telegramMessageId: out?.messageId?.toString() ?? null,

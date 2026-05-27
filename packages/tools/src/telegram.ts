@@ -81,9 +81,17 @@ export const telegramSend = defineTool({
   sideEffects: { writes: ['telegram'] },
   secrets: ['TELEGRAM_BOT_TOKEN'],
   async run({ text, parseMode, chatId, replyMarkup }, ctx) {
-    const finalChatId = chatId ?? ctx.agentChatId;
+    // ★ 안전망: chatId 인자가 들어와도 무시. 항상 본인 agentChatId 강제.
+    // 학습자 코드가 다른 사람 chat_id를 박더라도(실수/의도 무관) 본인 텔레그램에만 발송됨.
+    if (chatId && chatId !== ctx.agentChatId) {
+      ctx.logger.warn('telegram.send: chatId override 무시 — 본인 chat 으로 강제', {
+        ignoredChatId: chatId,
+        actualChatId: ctx.agentChatId,
+      });
+    }
+    const finalChatId = ctx.agentChatId;
     if (!finalChatId) {
-      throw new Error('chatId가 필요해요. setup 마법사로 텔레그램 연결을 먼저 끝내세요.');
+      throw new Error('본인 텔레그램 연결이 안 됐어요. /start <slug> 로 봇 등록을 먼저 끝내세요.');
     }
     const tg = new TelegramClient(ctx.secret('TELEGRAM_BOT_TOKEN'));
     try {
@@ -161,9 +169,20 @@ export const telegramEditMessage = defineTool({
   costTier: 'free',
   secrets: ['TELEGRAM_BOT_TOKEN'],
   async run({ chatId, messageId, text, parseMode, replyMarkup }, ctx) {
+    // ★ 안전망: chatId override 무시. 본인 agentChatId 강제.
+    // 다른 사람의 chat_id + messageId 박아도 본인 chat 으로 강제되어, 본인 메시지 ID가 아니면 텔레그램이 404 거부.
+    const agentChatId = (ctx as unknown as { agentChatId?: string }).agentChatId;
+    if (chatId && chatId !== agentChatId) {
+      ctx.logger.warn('telegram.edit_message: chatId override 무시 — 본인 chat 강제', {
+        ignoredChatId: chatId,
+        actualChatId: agentChatId,
+      });
+    }
+    const finalChatId = agentChatId;
+    if (!finalChatId) throw new Error('본인 텔레그램 연결이 안 됐어요.');
     const tg = new TelegramClient(ctx.secret('TELEGRAM_BOT_TOKEN'));
     await tg.editMessageText({
-      chat_id: chatId,
+      chat_id: finalChatId,
       message_id: messageId,
       text,
       ...(parseMode ? { parse_mode: parseMode } : {}),
@@ -194,8 +213,16 @@ export const telegramSendWithButton = defineTool({
   costTier: 'free',
   secrets: ['TELEGRAM_BOT_TOKEN'],
   async run({ text, buttons, chatId }, ctx) {
-    const finalChatId = chatId ?? (ctx as unknown as { agentChatId?: string }).agentChatId;
-    if (!finalChatId) throw new Error('chatId가 필요해요.');
+    // ★ 안전망: chatId override 무시. 본인 agentChatId 강제 (telegram.send 와 동일).
+    const agentChatId = (ctx as unknown as { agentChatId?: string }).agentChatId;
+    if (chatId && chatId !== agentChatId) {
+      ctx.logger.warn('telegram.send_with_button: chatId override 무시 — 본인 chat 강제', {
+        ignoredChatId: chatId,
+        actualChatId: agentChatId,
+      });
+    }
+    const finalChatId = agentChatId;
+    if (!finalChatId) throw new Error('본인 텔레그램 연결이 안 됐어요.');
     const tg = new TelegramClient(ctx.secret('TELEGRAM_BOT_TOKEN'));
     const r = await tg.sendMessage({
       chat_id: finalChatId,
