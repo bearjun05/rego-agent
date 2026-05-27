@@ -18,6 +18,17 @@ export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
+    // 0) 멘션 메시지에 👀 이모지 달기 (수신 확인용)
+    try {
+      await ctx.tools['slack.add_reaction']!({
+        channel: event.channel,
+        timestamp: event.ts,
+        emoji: 'eyes',
+      });
+    } catch (err) {
+      ctx.logger.warn('add_reaction 실패', { err: String(err) });
+    }
+
     // 1) 분류
     const { category, confidence, reason } = await ctx.llm.classify({
       text: event.text,
