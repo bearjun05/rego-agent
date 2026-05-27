@@ -4,24 +4,31 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const classifyPrompt = await readFile(path.join(here, 'prompts/classify.md'), 'utf8');
 
-/**
- * 본인 에이전트의 실제 동작 코드.
- *
- * 이벤트 종류별 함수:
- *   - onSlackMention: 슬랙에서 본인 이름이 태그될 때
- *   - onSlackMessage: 채널 메시지 (트리거에 명시했을 때)
- *   - onSlackReaction: 이모지 반응 (트리거에 명시했을 때)
- *   - onCron: 스케줄
- *   - onManual: 대시보드에서 수동 실행
- */
+const EMOJI: Record<string, string> = {
+  question: '❓',
+  request: '📝',
+  schedule: '📅',
+  info: '📰',
+};
+
+const FOOTER: Record<string, string> = {
+  question: '_읽고 답변해주세요._',
+  request: '_작업 요청입니다. 확인해주세요._',
+  schedule: '_일정 관련 내용입니다. 확인해주세요._',
+  info: '_공유 사항입니다._',
+};
+
 export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
-    // 1) 분류 + 요약 병렬 실행
-    const [{ category, confidence, reason }, summaryRaw] = await Promise.all([
+    const classifyPrompt = await readFile(
+      path.join(here, 'prompts/classify.md'),
+      'utf8',
+    ).catch(() => '');
+
+    const [{ category, confidence }, summaryRaw] = await Promise.all([
       ctx.llm.classify({
         text: event.text,
         categories: [
@@ -37,17 +44,13 @@ export default defineHandler({
       }),
     ]);
 
-    const summary = typeof summaryRaw === 'string' ? summaryRaw : summaryRaw?.text ?? event.text.slice(0, 280);
+    const summary =
+      typeof summaryRaw === 'string'
+        ? summaryRaw
+        : (summaryRaw?.text ?? event.text.slice(0, 280));
 
-    // 2) 텔레그램 알림
-    const emoji =
-      category === 'question'
-        ? '❓'
-        : category === 'request'
-          ? '📝'
-          : category === 'schedule'
-            ? '📅'
-            : '📰';
+    const emoji = EMOJI[category] ?? '📌';
+    const footer = FOOTER[category] ?? '';
 
     const lines = [
       `${emoji} *${category.toUpperCase()}*${confidence >= 0.7 ? '' : ' (애매)'}`,
@@ -56,19 +59,10 @@ export default defineHandler({
       `*ch:* #${event.channelName ?? event.channel}`,
       ``,
       `*요약:* ${summary}`,
+      ``,
+      footer,
     ];
-    const hasQuestion = event.text.includes('?') || event.text.includes('？');
-    const hasExclamation = event.text.includes('!') || event.text.includes('！');
-    const hasPeriod = event.text.includes('.');
 
-    if (hasQuestion) {
-      lines.push(``, `_읽고 답변해주세요._`);
-    } else if (hasExclamation || hasPeriod) {
-      lines.push(``, `_공유 사항입니다. 읽어주세요._`);
-      if (hasExclamation) lines.push(`_중요할지도 모르는 공유 사항입니다!_`);
-    } else if (reason) {
-      lines.push(``, `_${reason}_`);
-    }
     if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
 
     await ctx.tools['telegram.send']!({
