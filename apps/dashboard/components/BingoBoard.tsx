@@ -80,11 +80,11 @@ export function BingoBoard({
   const doneCount = Object.values(data.cells).filter((s) => s === 'done').length;
 
   return (
-    <div className="brut p-3">
-      <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-ink/15">
+    <div className="brut p-4">
+      <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-ink/15">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Bingo</div>
-          <div className="font-display font-bold text-sm leading-tight">9칸 미션</div>
+          <div className="font-display font-bold text-base leading-tight">9칸 미션</div>
         </div>
         <div className="flex items-center gap-2">
           <div className="brick-row" aria-hidden>
@@ -92,13 +92,14 @@ export function BingoBoard({
               <span
                 key={n}
                 className={`brick-stud ${n <= doneCount ? 'brick-stud-on' : ''}`}
+                style={{ width: 12, height: 12 }}
               />
             ))}
           </div>
-          <span className="font-mono text-[10px] text-muted tabular-nums">{doneCount}/9</span>
+          <span className="font-mono text-xs text-muted tabular-nums">{doneCount}/9</span>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-1 stagger">
+      <div className="grid grid-cols-3 gap-1.5 stagger">
         {data.defs.map((def) => {
           const status = data.cells[def.id];
           const done = status === 'done';
@@ -112,28 +113,28 @@ export function BingoBoard({
                 setTimeout(() => el.classList.remove('cell-pop'), 220);
                 onCellClick(def, status);
               }}
-              className={`bingo-cell aspect-square p-2 border-brick border-line text-left relative overflow-hidden flex flex-col justify-between ${
+              className={`bingo-cell aspect-square p-2.5 border-brick border-line text-left relative overflow-hidden flex flex-col justify-between ${
                 done ? 'bg-warm text-paper brick' : 'bg-paper hover:bg-sand'
               } ${isPopping ? 'snap-in' : ''}`}
               style={{ borderRadius: 'var(--th-card-radius, 0)' }}
             >
               <span
                 aria-hidden
-                className="absolute top-1.5 right-1.5 rounded-full"
+                className="absolute top-2 right-2 rounded-full"
                 style={{
-                  width: 'calc(var(--th-stud-size, 8px) * 0.85)',
-                  height: 'calc(var(--th-stud-size, 8px) * 0.85)',
+                  width: 10,
+                  height: 10,
                   background: done ? 'var(--th-bg)' : 'color-mix(in srgb, var(--th-fg) 18%, transparent)',
                 }}
               />
               {isPopping && <Confetti />}
               <div
                 className="font-display font-extrabold tabular-nums leading-none"
-                style={{ fontSize: 22, opacity: done ? 0.55 : 0.35 }}
+                style={{ fontSize: 28, opacity: done ? 0.6 : 0.38 }}
               >
                 {String(def.id).padStart(2, '0')}
               </div>
-              <div className="font-display font-bold text-[11px] leading-tight">
+              <div className="font-display font-bold text-[13px] leading-tight">
                 {def.short}
               </div>
             </button>

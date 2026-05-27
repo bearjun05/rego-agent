@@ -46,7 +46,6 @@ function ClassicLayout() {
       <section className="mb-6">
         <HomeChat />
       </section>
-      <MonitorTile />
     </div>
   );
 }

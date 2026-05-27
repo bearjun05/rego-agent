@@ -11,6 +11,8 @@ import { ThemePicker, themeCategoryToIds, themeCategoryReason } from './ThemePic
 import { weekLabel, weekLabelEn } from '@/lib/week';
 import { Markdown } from './Markdown';
 import { ChatCard, parseSegments } from './ChatCards';
+import { SmokeTestCard, SmokeResultCard } from './SmokeTestCard';
+import { CompletionBadge } from './CompletionBadge';
 
 type CardData =
   | { type: 'oauth'; agentSlug: string; done?: boolean }
@@ -19,7 +21,17 @@ type CardData =
   | { type: 'reload'; agentSlug: string }
   | { type: 'monitor' }
   | { type: 'theme-picker'; themeIds: string[]; reason: string }
-  | { type: 'open-bingo-panel' };
+  | { type: 'open-bingo-panel' }
+  | { type: 'deploy-shimmer'; sha?: string } // push 받은 직후 "적용 중…" shimmer
+  | { type: 'smoke-test'; agentSlug: string } // reload 완료 직후 자동 표시
+  | {
+      type: 'smoke-result';
+      fixtureTitle: string;
+      passed: boolean;
+      durationMs: number;
+      sentText?: string;
+      error?: string;
+    };
 
 interface Message {
   role: 'user' | 'assistant';
@@ -70,6 +82,8 @@ export function HomeChat() {
   const [stage, setStage] = useState<'askName' | 'chatting'>('askName');
   const [bingoRefreshKey, setBingoRefreshKey] = useState(0);
   const [activeMissionCell, setActiveMissionCell] = useState<CellDef | null>(null);
+  /** 스모크 테스트 "직접 메시지 만들기" 입력 모드 (true면 사용자 입력 → smoke run instantText) */
+  const [activeSmokeMode, setActiveSmokeMode] = useState(false);
 
   const lastActivityRef = useRef<number>(Date.now());
   const prevCellsRef = useRef<Record<number, 'done' | 'pending'> | null>(null);
@@ -243,13 +257,32 @@ export function HomeChat() {
     const handler = (ev: MessageEvent) => {
       try {
         const data = JSON.parse(ev.data) as { type: string; agentName?: string; payload?: unknown };
+
+        // github.push는 agentName 없음 — 커밋 작성자 이메일/폴더로 추정해서 본인 거만 처리
+        if (data.type === 'github.push') {
+          const ref = (data.payload as { ref?: string } | undefined)?.ref;
+          // 학습자 본인 브랜치 push만 shimmer 띄움
+          if (ref === `refs/heads/learner/${slug}`) {
+            setMessages((m) => [
+              ...m,
+              { role: 'assistant', content: '', card: { type: 'deploy-shimmer' } },
+            ]);
+            lastActivityRef.current = Date.now();
+          }
+          return;
+        }
+
         if (data.agentName && data.agentName !== slug) return;
         let msg: string | null = null;
+        let cardAfter: CardData | null = null;
         if (data.type === 'slack.mention.received') {
           msg = '🔔 슬랙 멘션 들어왔어요! 1분 안에 텔레그램 도착하는지 봐요.';
         } else if (data.type === 'agent.reloaded') {
           const sha = (data.payload as { sha?: string } | undefined)?.sha?.slice(0, 8);
-          msg = `⚡ 코드 적용 완료${sha ? ` (${sha})` : ''}! 슬랙에서 멘션 한 번 보내볼까요?`;
+          msg = `✅ 코드 적용 완료${sha ? ` (${sha})` : ''}! 한번 테스트해볼까요?`;
+          cardAfter = { type: 'smoke-test', agentSlug: slug };
+          // shimmer 카드 제거 — deploy-shimmer 타입 메시지 다 걷어내기
+          setMessages((m) => m.filter((mm) => mm.card?.type !== 'deploy-shimmer'));
         } else if (data.type === 'tool.called') {
           const payload = data.payload as { toolId?: string } | undefined;
           if (payload?.toolId === 'slack.reactions_add') {
@@ -266,12 +299,13 @@ export function HomeChat() {
           }
         }
         if (msg) {
-          insolMessage(msg);
+          insolMessage(msg, cardAfter ?? undefined);
           setBingoRefreshKey((k) => k + 1);
         }
       } catch {}
     };
     for (const t of [
+      'github.push',
       'slack.mention.received',
       'agent.reloaded',
       'tool.called',
@@ -281,6 +315,7 @@ export function HomeChat() {
     }
     return () => {
       for (const t of [
+        'github.push',
         'slack.mention.received',
         'agent.reloaded',
         'tool.called',
@@ -591,6 +626,45 @@ export function HomeChat() {
       return;
     }
 
+    // 스모크 입력 모드: 사용자 텍스트를 가짜 슬랙 멘션으로 본인 agent 실행
+    if (activeSmokeMode && slug) {
+      setMessages((m) => [...m, { role: 'user', content }]);
+      setActiveSmokeMode(false);
+      setBusy(true);
+      try {
+        const r = await fetch('/api/runtime/smoke/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentName: slug, instantText: content }),
+        });
+        const data = (await r.json()) as {
+          result?: { status: string; durationMs: number };
+          telegramSent?: string[];
+          error?: string;
+        };
+        setMessages((m) => [
+          ...m,
+          {
+            role: 'assistant',
+            content: '',
+            card: {
+              type: 'smoke-result',
+              fixtureTitle: `직접 만든 메시지: "${content.slice(0, 30)}${content.length > 30 ? '…' : ''}"`,
+              passed: data.result?.status === 'success',
+              durationMs: data.result?.durationMs ?? 0,
+              sentText: data.telegramSent?.[0],
+              error: data.error,
+            },
+          },
+        ]);
+      } catch (e) {
+        insolMessage(`⚠ 스모크 실패: ${(e as Error).message}`);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     // 자유 대화 — 이름 정정 의도는 서버 LLM이 update_call_name 도구로 처리
     setMessages((m) => [...m, { role: 'user', content }]);
     await askCoach(content, sessionRef.current, slug, given);
@@ -619,7 +693,10 @@ export function HomeChat() {
         <div className="flex items-center gap-3">
           <span className="text-2xl leading-none">🐱</span>
           <div>
-            <div className="font-display font-bold text-lg leading-tight">인솔이</div>
+            <div className="font-display font-bold text-lg leading-tight flex items-center gap-2">
+              인솔이
+              {doneCount === 9 && <CompletionBadge size="sm" label="2주차 진입" />}
+            </div>
             <div className="font-mono text-[10px] uppercase text-muted">
               {given ? (
                 <>
@@ -768,6 +845,49 @@ export function HomeChat() {
                     </div>
                   </button>
                 )}
+                {m.card.type === 'deploy-shimmer' && (
+                  <div className="brut p-3 bg-paper overflow-hidden relative">
+                    <div className="absolute inset-0 deploy-shimmer pointer-events-none" />
+                    <div className="relative font-display font-bold text-sm mb-0.5">
+                      ⚡ 코드가 자동으로 적용되고 있어요…
+                    </div>
+                    <div className="relative font-mono text-[11px] text-muted">
+                      learner/{slug} 브랜치 → 서버 반영 (보통 30~60초)
+                    </div>
+                  </div>
+                )}
+                {m.card.type === 'smoke-test' && (
+                  <SmokeTestCard
+                    agentSlug={m.card.agentSlug}
+                    onPickWriteOwn={() => setActiveSmokeMode(true)}
+                    onResult={(r) => {
+                      setMessages((mm) => [
+                        ...mm,
+                        {
+                          role: 'assistant',
+                          content: '',
+                          card: {
+                            type: 'smoke-result',
+                            fixtureTitle: r.fixtureTitle,
+                            passed: r.passed,
+                            durationMs: r.durationMs,
+                            sentText: r.sentText,
+                            error: r.error,
+                          },
+                        },
+                      ]);
+                    }}
+                  />
+                )}
+                {m.card.type === 'smoke-result' && (
+                  <SmokeResultCard
+                    fixtureTitle={m.card.fixtureTitle}
+                    passed={m.card.passed}
+                    durationMs={m.card.durationMs}
+                    sentText={m.card.sentText}
+                    error={m.card.error}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -813,7 +933,9 @@ export function HomeChat() {
               ? '잠시만요...'
               : stage === 'askName'
                 ? '이름을 입력하세요...'
-                : '오늘 뭐부터 할지 물어보세요...'
+                : activeSmokeMode
+                  ? '테스트 메시지를 적어주세요 (예: "이거 환불 가능한가요?")'
+                  : '오늘 뭐부터 할지 물어보세요...'
           }
           className="flex-1 px-3 py-2 border-2 border-ink bg-paper font-mono text-sm focus:outline-none focus:bg-sand disabled:opacity-50"
           disabled={busy || typing}

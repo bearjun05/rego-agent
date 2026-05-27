@@ -122,8 +122,14 @@ export function createOAuthApi() {
       if (gh) {
         try {
           const r = await ensureLearnerBranch(agent, gh);
-          if (r.created) log.info(`learner branch created: learner/${agent}`);
-          else if (r.error) log.warn(`learner branch ensure: ${r.error}`);
+          if (r.created) {
+            log.info(`learner branch created: learner/${agent}`);
+            // branch 캐시 무효화 — bootstrap prereqs가 즉시 ✓로 반영
+            const { invalidateBranchCache } = await import('../learner-status.js');
+            invalidateBranchCache();
+          } else if (r.error) {
+            log.warn(`learner branch ensure: ${r.error}`);
+          }
         } catch (err) {
           log.warn(`learner branch creation failed for ${agent}`, err);
         }

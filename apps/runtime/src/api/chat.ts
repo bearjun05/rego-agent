@@ -22,6 +22,7 @@ import { checkAllCells } from '../bingo-checks.js';
 import { loadLearnerCode, buildOperatorOverview } from '../insol-analyzer.js';
 import { currentWeek, weekLabel } from '../study-week.js';
 import { buildInsolStaticPrompt } from '../insol-prompt.js';
+import { loadAllPrereqs, type LearnerPrereqs } from '../learner-status.js';
 import type { ToolDef, ToolCall } from '@rego/tools/llm';
 
 const log = createLogger('chat');
@@ -377,6 +378,21 @@ export function createChatApi() {
       .map((r) => `- slug: ${r.slug.padEnd(20)} displayName: ${r.displayName}`)
       .join('\n');
 
+    // 16명 1주차 선행 상태 — LLM이 매칭 후 미완 항목부터 안내하도록
+    let prereqsTable = '';
+    try {
+      const all = await loadAllPrereqs();
+      prereqsTable = Object.values(all)
+        .sort((a, b) => a.slug.localeCompare(b.slug))
+        .map(
+          (p) =>
+            `- ${p.slug.padEnd(15)} 폴더 ${p.folderOk ? '✓' : '✗'} | 브랜치 ${p.branchOk ? '✓' : '✗'} | 슬랙OAuth ${p.slackOk ? '✓' : '✗'} | 텔레그램 ${p.telegramOk ? '✓' : '✗'}`,
+        )
+        .join('\n');
+    } catch (err) {
+      log.warn('prereqs load failed for bootstrap', err);
+    }
+
     const system = [
       `# 🗓 오늘은 **${weekLabel()}** (${currentWeek()}주차) 진행 중.`,
       '',
@@ -389,6 +405,19 @@ export function createChatApi() {
       rosterTable,
       '',
       '운영자 별칭(준/웅준/창조주/ujchoe 등) → uj_choe 슬러그로 매칭.',
+      '',
+      '---',
+      '## 학습자 1주차 선행 단계 완료 현황',
+      prereqsTable || '(상태 조회 실패)',
+      '',
+      '**식별된 학습자(identify_learner 호출 결과의 slug) 줄을 보고 미완(✗) 항목이 있으면',
+      '환영 멘트에 그것부터 부드럽게 안내해. 미완이 여러 개면 우선순위:',
+      '1. 텔레그램 ✗ → "@rego_agent_bot에서 `/start <slug>` 입력해주세요"',
+      '2. 슬랙 OAuth ✗ → "슬랙 인증부터 같이 해볼까요?" (이건 채팅 메인에서 show_oauth_card 도구로)',
+      '3. 브랜치 ✗ → "슬랙 OAuth 끝나면 자동으로 만들어져요" (정상 진행 안내)',
+      '4. 폴더 ✗ → 운영자에게 알리도록 안내 (드뭄)',
+      '모두 ✓ → 2주차 빙고 진행 안내.',
+      '톤: "안녕하세요 X님! 1주차에 했던 거 보니까 텔레그램이 아직이에요. 그것부터 같이 해볼까요?" 식.**',
     ].join('\n');
 
     const tools: ToolDef[] = [
@@ -456,6 +485,7 @@ export function createChatApi() {
       let identified: 'learner' | 'guest' | 'none' = 'none';
       let slug: string | null = null;
       let callName: string | null = null;
+      let prereqs: LearnerPrereqs | null = null;
 
       const tc = toolCalls[0];
       if (tc) {
@@ -495,6 +525,17 @@ export function createChatApi() {
 
       const welcomeMessage = welcomeText.trim() || fallbackWelcome;
 
+      // prereqs는 위에서 한 번 다 조회했지만, 응답에는 식별된 slug 것만 노출
+      if (slug) {
+        try {
+          const all = await loadAllPrereqs();
+          prereqs = all[slug] ?? null;
+          log.info(`bootstrap prereqs for ${slug}`, prereqs as Record<string, unknown> | null);
+        } catch (err) {
+          log.warn('prereqs load failed', err);
+        }
+      }
+
       // chat history에도 기록 (이후 채팅에서 컨텍스트로 활용)
       await db
         .insert(chatMessages)
@@ -506,7 +547,7 @@ export function createChatApi() {
         content: welcomeMessage,
       });
 
-      return c.json({ identified, slug, callName, welcomeMessage });
+      return c.json({ identified, slug, callName, welcomeMessage, prereqs });
     } catch (err) {
       log.error('bootstrap failed', err);
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);

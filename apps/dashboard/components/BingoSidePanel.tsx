@@ -2,17 +2,17 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { BingoBoard, type CellDef, type CellStatus } from './BingoBoard';
+import { CompletionBadge, countBingoLines, type CellMap } from './CompletionBadge';
 
 interface RankRow {
   name: string;
   displayName: string | null;
   bingoDone: number;
+  bingoCells?: CellMap; // { "1": "done", "2": "pending", ... }
 }
 
 /**
- * 채팅 오른쪽 1/3에 들어가는 사이드 패널.
- * - 상단 2/3: 빙고판 (셀 호버 → 짧은 설명 / 클릭 → 인솔이 채팅에 설명)
- * - 하단 1/3: 실시간 순위판 미니 (클릭 → /week2 페이지)
+ * 채팅 우측 패널 — 빙고판 + 실시간 순위 (자연 길이, gap-3 으로 붙임).
  */
 export function BingoSidePanel({
   agentSlug,
@@ -35,6 +35,13 @@ export function BingoSidePanel({
   );
 }
 
+function medal(rank: number): string {
+  if (rank === 1) return '👑';
+  if (rank === 2) return '🥈';
+  if (rank === 3) return '🥉';
+  return '';
+}
+
 function MiniLeaderboard({ agentSlug }: { agentSlug: string }) {
   const [rows, setRows] = useState<RankRow[]>([]);
   useEffect(() => {
@@ -54,41 +61,65 @@ function MiniLeaderboard({ agentSlug }: { agentSlug: string }) {
     };
   }, []);
 
-  const sorted = [...rows].sort((a, b) => b.bingoDone - a.bingoDone);
+  // 정렬: 라인 수 우선 → 칸 수 보조 (라인이 같으면 칸 많은 사람이 앞)
+  const enriched = rows.map((r) => ({
+    ...r,
+    lines: r.bingoCells ? countBingoLines(r.bingoCells) : 0,
+  }));
+  const sorted = [...enriched].sort((a, b) => {
+    if (b.lines !== a.lines) return b.lines - a.lines;
+    return b.bingoDone - a.bingoDone;
+  });
   const myIdx = sorted.findIndex((r) => r.name === agentSlug);
   const top = sorted.slice(0, 5);
 
   return (
     <Link
       href="/week2"
-      className="brut p-3 hover:bg-sand transition-colors flex flex-col gap-1.5"
+      className="brut p-4 hover:bg-sand transition-colors flex flex-col gap-2"
       title="클릭 → 16명 진행률 전체 대시보드"
     >
-      <div className="flex items-center justify-between pb-1.5 border-b border-ink/15">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">실시간 순위</span>
-        <span className="font-mono text-[9px] text-muted">
-          {myIdx >= 0 ? `${myIdx + 1}위` : '—'} · 전체 →
+      <div className="flex items-center justify-between pb-2 border-b border-ink/15">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Ranking</div>
+          <div className="font-display font-bold text-base leading-tight">실시간 순위</div>
+        </div>
+        <span className="font-mono text-[10px] text-muted">
+          {myIdx >= 0 ? `내 ${myIdx + 1}위` : '—'} · 전체 →
         </span>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {top.map((r, i) => {
           const isMe = r.name === agentSlug;
+          const isComplete = r.bingoDone === 9;
+          const rank = i + 1;
           return (
             <div
               key={r.name}
-              className={`flex items-center gap-2 text-[11px] ${isMe ? 'font-bold' : ''}`}
+              className={`flex items-center gap-2 text-[13px] ${isMe ? 'font-bold' : ''}`}
             >
-              <span
-                className="w-5 text-center font-mono tabular-nums"
-                style={{ color: i < 3 ? 'var(--th-accent)' : 'var(--th-muted)' }}
-              >
-                {i + 1}
+              <span className="w-6 text-center font-display tabular-nums leading-none" style={{ fontSize: rank <= 3 ? 16 : 13 }}>
+                {rank <= 3 ? medal(rank) : <span className="text-muted font-mono">{rank}</span>}
               </span>
-              <span className={`flex-1 truncate ${isMe ? 'text-rust' : ''}`}>
-                {r.displayName ?? r.name}
-                {isMe && ' (나)'}
+              <span className={`flex-1 truncate flex items-center gap-1.5 ${isMe ? 'text-rust' : ''}`}>
+                <span className="truncate">
+                  {r.displayName ?? r.name}
+                  {isMe && ' (나)'}
+                </span>
+                {isComplete && <CompletionBadge size="sm" />}
               </span>
-              <span className="font-mono text-muted tabular-nums">{r.bingoDone}/9</span>
+              {isComplete ? (
+                <span
+                  className="font-mono text-[10px] font-bold tabular-nums px-1.5 py-0.5 border-2 border-ink"
+                  style={{ background: 'var(--th-primary-2)', color: 'var(--th-fg)' }}
+                >
+                  완성
+                </span>
+              ) : (
+                <span className="font-mono text-[11px] text-muted tabular-nums">
+                  <span className="font-bold text-ink">{r.lines}</span>빙고 · {r.bingoDone}/9칸
+                </span>
+              )}
             </div>
           );
         })}

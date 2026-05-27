@@ -150,13 +150,16 @@ claude
   - 예) `onSlackMention(event, ctx)` 안에서 `ctx.llm.generate(...)` 로 요약 후 `ctx.tools['telegram.send']({...})`.
 - **명함**: `agent.config.ts`. 트리거(`trigger.slackMention()`)·도구·아이콘 등.
 
-**반영하기**
+**반영하기 (자동)**
 ```
-git add .
+git add agents/<내slug>
 git commit -m "내 에이전트 수정"
-git push
+git push origin learner/<내slug>
 ```
-- push 후 약 30초 → 대시보드 **1주차 대시보드**(/week1)에서 내 카드/활동 확인. 자동 스모크 테스트도 돈다.
+- **자동 동기화**: 본인 브랜치(`learner/<내slug>`)에 push만 하면 GitHub webhook이 우리 서버로 알려줘서
+  **30~60초 안에 자동으로 반영**돼. "내 코드 적용" 버튼 누를 필요 없음.
+- 인솔이 채팅에 SSE로 `agent.reloaded` 이벤트가 와서 "⚡ 코드 적용 완료" 알림이 자동으로 뜸.
+- 만약 자동이 안 됐으면(webhook 실패 등) `ReloadButton` 카드로 수동 적용 가능.
 
 **Claude에게 부탁하는 예시 문구**
 - "멘션이 오면 내용 요약해서 텔레그램으로 보내게 해줘"
@@ -223,7 +226,7 @@ rego-agent/
 - 호스팅: **이 서버 자체 호스팅** (Railway 아님). Postgres(docker) + runtime(3001) + dashboard(3030) + Caddy(rego.jotto.in)
 - LLM: OpenRouter (분류=Haiku급, 답변/채팅=Sonnet급 등 모델 env로 지정)
 - DB: Postgres + Drizzle ORM (영구 로그)
-- 배포: 본인 폴더 수정 → `git push` → GitHub webhook → 서버가 `agents/`만 동기화 + reload + AI분석 → 대시보드/텔레그램 반영
+- 배포: 본인 폴더 수정 → `git push origin learner/<slug>` → GitHub webhook → 서버가 그 학습자 폴더만 동기화 + reload + AI분석 → 대시보드/텔레그램 반영 (30~60초)
 - 안전장치: 분당 200 도구 / 100 LLM 초과 시 자동 정지(runaway) + audit. 핸들러 timeout 30초.
 - 비용: 실시간 집계만 (한도는 운영자가 봄). 멘션 1건 ~ $0.001 수준(저렴한 모델 기준).
 
