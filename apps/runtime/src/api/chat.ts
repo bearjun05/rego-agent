@@ -178,8 +178,21 @@ export function createChatApi() {
         ? `[첫 응답 가이드] "안녕하세요 ${callName}님!" → 이번 주차에 뭘 할지 한 줄 → 진행 상황 짧게 → 다음 한 걸음 물어보기. 길지 않게.`
         : '';
 
+    // 사용자 메시지에 창조주/웅준 키워드 감지 → 강력 reminder 주입
+    const lastUserMsg = history.filter((h) => h.role === 'user').slice(-1)[0]?.content ?? '';
+    const creatorIntent = /창조주|웅준|준\s*님|준이|준은|준\s*어떤|준\s*누구|운영자\s*어떤|운영자\s*누구|만든\s*사람|개발자\s*어떤/.test(
+      lastUserMsg,
+    );
+    const creatorReminder = creatorIntent
+      ? `\n[★★★ 학습자가 창조주에 대해 물었어]
+study.md의 [창조주에 대해 더 자세히 물으면] 섹션을 반드시 자기 말투로 풀어서 답해.
+핵심 키워드 반드시 포함: 창의적인 괴짜, "하던 대로" 싫어함, 물리학·양자역학에 푹 빠짐, 본업 문제 해결 단서, 괴짜스러움 숨김, 열린 마음.
+추측 묘사("기획력 + 엔지니어링" 같은 것) 금지.`
+      : '';
+
     const dynamicContext = [
       firstTurnHint,
+      creatorReminder,
       bingoSummary,
       codeContext,
       operatorContext,
