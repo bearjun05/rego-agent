@@ -21,6 +21,10 @@ interface PrereqsData {
   telegramOk: boolean;
 }
 
+function allPrereqsDone(p: PrereqsData | null | undefined): boolean {
+  return !!p && p.folderOk && p.branchOk && p.slackOk && p.telegramOk;
+}
+
 type CardData =
   | { type: 'oauth'; agentSlug: string; done?: boolean }
   | { type: 'bingo'; agentSlug: string }
@@ -130,6 +134,8 @@ export function HomeChat() {
   const inFlightCellsRef = useRef<Set<number>>(new Set());
   /** 셀 클릭(mission 카드 표시)도 짧은 시간 내 중복 차단 (cellId → lastClickAt) */
   const cellClickAtRef = useRef<Map<number, number>>(new Map());
+  /** 빙고 안내(빙고로 해보면 좋을 것 같아서…) 메시지를 한 세션에 한 번만 띄우기 위한 가드 */
+  const bingoIntroShownRef = useRef(false);
 
   useEffect(() => {
     // 채팅 박스 내부만 스크롤 — 페이지 전체 강제 스크롤은 사용자 시선을 빼앗아서 X
@@ -213,12 +219,19 @@ export function HomeChat() {
             { role: 'assistant', content: '', card: { type: 'prereqs', prereqs, slug: newSlug } },
           ]);
         }
-        // 빙고 패널 자동 열기
-        setMessages((m) => [
-          ...m,
-          { role: 'assistant', content: '', card: { type: 'open-bingo-panel' } },
-        ]);
-        setSidePanelOpen(true);
+        // 4종 준비가 모두 끝났을 때만 빙고판 등장 — 학습자가 일단 준비부터 차분히 끝내게.
+        if (allPrereqsDone(prereqs)) {
+          bingoIntroShownRef.current = true;
+          await typeOut([
+            '오늘 모든 준비가 다 끝났어요!',
+            '이제 빙고로 한 칸씩 풀어보면 좋을 것 같아서 빙고판 준비해봤어요. 오른쪽에 띄워둘게요.',
+          ]);
+          setMessages((m) => [
+            ...m,
+            { role: 'assistant', content: '', card: { type: 'open-bingo-panel' } },
+          ]);
+          setSidePanelOpen(true);
+        }
       } else if (ident === 'guest') {
         setGiven(callName);
         setSlug(null);
@@ -264,16 +277,41 @@ export function HomeChat() {
             setStage('chatting');
             sessionRef.current = `user-${p.slug}`;
             await loadHistory(sessionRef.current);
-            await typeOut([
-              `다시 왔네요, ${p.given}님! 👋`,
-              `오늘은 **${weekLabel()}** — 저번 주 이어서 슬랙 멘션을 텔레그램으로 받는 거예요.`,
-              '오른쪽에 빙고판 + 실시간 순위 띄워둘게요. 막히는 거 있으면 바로 물어봐요!',
-            ]);
-            setMessages((m) => [
-              ...m,
-              { role: 'assistant', content: '', card: { type: 'open-bingo-panel' } },
-            ]);
-            setSidePanelOpen(true);
+
+            // 재방문 시 prereqs 재조회 — 4종 다 통과한 학습자만 빙고판 자동 등장
+            let prereqs: PrereqsData | null = null;
+            try {
+              const r = await fetch(
+                `/api/runtime/insol/prereqs?slug=${encodeURIComponent(p.slug)}`,
+              );
+              const data = (await r.json()) as { prereqs?: PrereqsData | null };
+              prereqs = data.prereqs ?? null;
+            } catch {}
+
+            if (allPrereqsDone(prereqs)) {
+              bingoIntroShownRef.current = true;
+              await typeOut([
+                `다시 왔네요, ${p.given}님! 👋`,
+                `오늘은 **${weekLabel()}** — 저번 주 이어서 슬랙 멘션을 텔레그램으로 받는 거예요.`,
+                '오른쪽에 빙고판 + 실시간 순위 띄워둘게요. 막히는 거 있으면 바로 물어봐요!',
+              ]);
+              setMessages((m) => [
+                ...m,
+                { role: 'assistant', content: '', card: { type: 'open-bingo-panel' } },
+              ]);
+              setSidePanelOpen(true);
+            } else {
+              await typeOut([
+                `다시 왔네요, ${p.given}님! 👋`,
+                '아직 준비가 다 안 끝났어요. 아래 체크리스트 한번 봐주세요. 다 끝나면 빙고가 자동으로 떠요.',
+              ]);
+              if (prereqs) {
+                setMessages((m) => [
+                  ...m,
+                  { role: 'assistant', content: '', card: { type: 'prereqs', prereqs, slug: p.slug! } },
+                ]);
+              }
+            }
             setBusy(false);
             return;
           }
@@ -291,6 +329,28 @@ export function HomeChat() {
   const insolMessage = (content: string, card?: CardData) => {
     setMessages((m) => [...m, { role: 'assistant', content, card }]);
     lastActivityRef.current = Date.now();
+  };
+
+  /**
+   * prereqs 재조회 → 4종 다 통과되면 한 번만 빙고 안내 메시지 + 빙고판 자동 등장.
+   * SSE telegram.registered / slack.oauth.completed 처리 후 호출.
+   */
+  const maybeShowBingoAfterPrereqs = async (forSlug: string) => {
+    if (bingoIntroShownRef.current) return;
+    try {
+      const r = await fetch(`/api/runtime/insol/prereqs?slug=${encodeURIComponent(forSlug)}`);
+      const data = (await r.json()) as { prereqs?: PrereqsData | null };
+      if (!allPrereqsDone(data.prereqs)) return;
+      bingoIntroShownRef.current = true;
+      insolMessage('오늘 모든 준비가 다 끝났어요!');
+      insolMessage(
+        '이제 빙고로 한 칸씩 풀어보면 좋을 것 같아서 빙고판 준비해봤어요. 오른쪽에 띄워둘게요.',
+        { type: 'open-bingo-panel' },
+      );
+      setSidePanelOpen(true);
+    } catch {
+      /* prereqs fetch 실패는 조용히 — 다음 SSE 이벤트에 재시도 */
+    }
   };
 
   // SSE 구독
@@ -346,11 +406,15 @@ export function HomeChat() {
           msg = '✅ 텔레그램 연결됐어요! 다음은 슬랙 인증이에요.';
           // 슬랙 카드 자동
           cardAfter = { type: 'oauth', agentSlug: slug };
+          // 4종 다 끝났으면 빙고 안내 (드물지만 텔레그램이 마지막인 케이스)
+          void maybeShowBingoAfterPrereqs(slug);
         } else if (data.type === 'slack.oauth.completed') {
           const branchCreated = (data.payload as { branchCreated?: boolean } | undefined)?.branchCreated;
           msg = branchCreated
             ? '✅ 슬랙 인증 + 본인 브랜치 생성 완료! 이제 코드 받으러 갈 차례예요. 컴퓨터 환경 알려주실래요? (Mac / Windows)'
             : '✅ 슬랙 인증 완료! 이제 코드 받으러 갈 차례예요. 컴퓨터 환경 알려주실래요? (Mac / Windows)';
+          // 보통 슬랙 OAuth 가 마지막 prereq — 끝나면 빙고 안내
+          void maybeShowBingoAfterPrereqs(slug);
         }
         if (msg) {
           insolMessage(msg, cardAfter ?? undefined);
@@ -1020,7 +1084,7 @@ export function HomeChat() {
   );
 }
 
-/** 1주차 선행 단계 체크리스트 — 학습자가 전체 흐름 한눈에 보게 */
+/** 2주차 준비 체크리스트 — 4종 다 통과되면 빙고판이 자동으로 등장 */
 function PrereqsCard({ prereqs, slug }: { prereqs: PrereqsData; slug: string }) {
   const items: Array<{ label: string; done: boolean; hint?: string }> = [
     {
@@ -1047,9 +1111,12 @@ function PrereqsCard({ prereqs, slug }: { prereqs: PrereqsData; slug: string }) 
   const doneCount = items.filter((i) => i.done).length;
   return (
     <div className="brut p-3 bg-paper">
-      <div className="flex items-center justify-between mb-2">
-        <div className="font-display font-bold text-sm">📋 1주차 준비 상태</div>
-        <div className="font-mono text-[10px] text-muted">{doneCount}/4</div>
+      <div className="flex items-end justify-between mb-3 pb-2 border-b border-ink/15">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Prereqs</div>
+          <div className="font-display font-bold text-sm leading-tight">2주차 준비</div>
+        </div>
+        <div className="font-mono text-[10px] text-muted tabular-nums">{doneCount}/4</div>
       </div>
       <ul className="space-y-1.5">
         {items.map((it, i) => (
