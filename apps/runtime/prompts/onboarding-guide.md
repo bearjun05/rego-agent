@@ -26,15 +26,20 @@
 
 ---
 
-## 전체 흐름 (5단계)
+## 전체 흐름 (6단계)
 
-1. **GitHub에서 내 컴퓨터로 코드 받기** (clone)
-2. **터미널에서 내 이름 폴더로 이동** (`agents/<내slug>`)
-3. **그 폴더에서 Claude Code 열기** (`claude`)
-4. **Telegram 봇 연결** (`/start <내slug>`)
-5. **연결 확인되면 개발 시작** — 프롬프트/핸들러를 깎으며 내 비서 만들기
+**대시보드(브라우저)에서 먼저**:
+1. **텔레그램 봇 연결** (대시보드 인솔이 안내 따라 `@rego_agent_bot`에 `/start <내slug>`)
+2. **슬랙 OAuth** (인솔이 채팅의 "Slack 인증하기" 카드)
+   → 끝나면 서버가 자동으로 `learner/<내slug>` 브랜치 만들어둠
 
-> 순서 중요: **Claude를 먼저 열고 → 텔레그램부터 연결 → 그다음 개발**.
+**본인 컴퓨터에서**:
+3. **GitHub에서 코드 받기** (clone)
+4. **본인 브랜치로 이동** (`git checkout learner/<내slug>`)
+5. **내 이름 폴더로 이동 + Claude Code 열기** (`cd agents/<내slug>` → `claude`)
+6. **편집 + push → 자동 반영** — handler.ts / prompts 깎으며 비서 만들기
+
+> 텔레그램·슬랙은 **브라우저에서**, 코드 받기·수정은 **본인 컴퓨터에서**. 인솔이가 한 단계씩 안내해줍니다.
 
 ---
 
@@ -55,7 +60,10 @@
 
 ---
 
-## 1단계 — GitHub에서 코드 받기 (clone)
+## 3단계 — GitHub에서 코드 받기 (clone)
+
+> ⚠️ 이 단계는 1·2단계(텔레그램·슬랙)를 대시보드에서 끝낸 후 진행.
+> 슬랙 OAuth가 끝나야 서버가 본인 브랜치(`learner/<내slug>`)를 자동 생성합니다.
 
 **git 설치 확인**
 - Mac: 터미널(`Terminal` 앱)에서 `git --version`. 없으면 안내문 따라 설치 팝업.
@@ -68,9 +76,27 @@ cd rego-agent
 ```
 - private 저장소라 로그인/권한 필요. "Repository not found" 가 뜨면 → 운영자(준)에게 GitHub 협업자 초대 요청.
 
+## 4단계 — 본인 브랜치로 이동
+
+슬랙 OAuth가 끝나면 서버가 `learner/<내slug>` 브랜치를 GitHub에 자동 생성했어요. 그 브랜치로 이동:
+
+```
+git fetch origin
+git checkout learner/<내slug>     # 예: git checkout learner/uj_choe
+```
+
+브랜치가 아직 없으면 (OAuth 안 끝남) 직접 만들기도 가능:
+```
+git checkout -b learner/<내slug>
+```
+
+**왜 본인 브랜치인가**:
+- `main`은 운영자만 push 가능 (CODEOWNERS). 학습자가 main에 push 시도하면 거절됩니다.
+- 본인 브랜치 push만 GitHub webhook으로 서버에 자동 반영됩니다.
+
 ---
 
-## 2단계 — 내 이름 폴더로 이동
+## 5단계 — 내 이름 폴더로 이동
 
 먼저 내 slug 확인 (이름 → slug). 모르면 코치가 매핑해준다.
 
@@ -98,7 +124,7 @@ Get-ChildItem agents -Directory | Select-String <이름일부>
 
 ---
 
-## 3단계 — 그 폴더에서 Claude Code 열기
+## 6단계 — 그 폴더에서 Claude Code 열기
 
 **설치 확인**
 ```
@@ -118,7 +144,9 @@ claude
 
 ---
 
-## 4단계 — Telegram 봇 연결 (개발 전에 먼저!)
+## 1단계 — Telegram 봇 연결 (가장 먼저!)
+
+> 대시보드에서 인솔이가 이 단계를 가장 먼저 안내합니다.
 
 1. **Telegram 설치**: 앱 없으면 https://telegram.org (Mac/Windows/모바일 아무거나).
 2. Telegram에서 **@rego_agent_bot** 검색 → 대화 열기.
@@ -126,13 +154,20 @@ claude
    ```
    /start <내slug>      # 예: /start uj_choe
    ```
-4. 봇이 "연결됐어요" 류의 응답을 보내면 성공. 이제 내 에이전트의 알림이 이 텔레그램으로 온다.
+4. 봇이 "연결됐어요" 류의 응답을 보내면 성공. 대시보드에 돌아와 인솔이에게 알리거나 새로고침하면 ✓로 바뀜.
 
 > 연결이 안 되면: slug 오타 확인 / 봇이 맞는지(@rego_agent_bot) 확인 / 잠시 후 재시도.
 
+## 2단계 — 슬랙 OAuth (대시보드에서)
+
+대시보드 인솔이 채팅에 **"Slack 인증하기"** 카드가 뜨면 클릭 → 새 탭에서 본인 슬랙 워크스페이스 인증.
+
+- 인증 완료 후 자동으로 빙고 1번이 채워지고, 서버가 `learner/<내slug>` 브랜치를 GitHub에 자동 생성합니다.
+- 본인 슬랙 ID와 등록된 자리가 다르면 거절됩니다 (다른 사람 자리로 인증 시도 방지).
+
 ---
 
-## 5단계 — 개발 시작: 내 비서 깎기
+## 7단계 — 개발 시작: 내 비서 깎기
 
 기본 목표는 **"슬랙에서 멘션을 받으면 텔레그램으로 알림"**. 여기서부터 자유롭게 확장한다.
 

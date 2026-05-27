@@ -14,6 +14,13 @@ import { ChatCard, parseSegments } from './ChatCards';
 import { SmokeTestCard, SmokeResultCard } from './SmokeTestCard';
 import { CompletionBadge } from './CompletionBadge';
 
+interface PrereqsData {
+  folderOk: boolean;
+  branchOk: boolean;
+  slackOk: boolean;
+  telegramOk: boolean;
+}
+
 type CardData =
   | { type: 'oauth'; agentSlug: string; done?: boolean }
   | { type: 'bingo'; agentSlug: string }
@@ -22,8 +29,9 @@ type CardData =
   | { type: 'monitor' }
   | { type: 'theme-picker'; themeIds: string[]; reason: string }
   | { type: 'open-bingo-panel' }
-  | { type: 'deploy-shimmer'; sha?: string } // push 받은 직후 "적용 중…" shimmer
-  | { type: 'smoke-test'; agentSlug: string } // reload 완료 직후 자동 표시
+  | { type: 'deploy-shimmer'; sha?: string }
+  | { type: 'smoke-test'; agentSlug: string }
+  | { type: 'prereqs'; prereqs: PrereqsData; slug: string }
   | {
       type: 'smoke-result';
       fixtureTitle: string;
@@ -145,6 +153,7 @@ export function HomeChat() {
         slug?: string | null;
         callName?: string | null;
         welcomeMessage?: string;
+        prereqs?: PrereqsData | null;
         error?: string;
       };
       if (data.error) {
@@ -156,6 +165,7 @@ export function HomeChat() {
       const callName = data.callName ?? null;
       const newSlug = data.slug ?? null;
       const welcome = data.welcomeMessage ?? '';
+      const prereqs = data.prereqs ?? null;
 
       if (ident === 'learner' && newSlug) {
         setSlug(newSlug);
@@ -170,6 +180,13 @@ export function HomeChat() {
           localStorage.setItem(SESSION_KEY, `user-${newSlug}`);
         } catch {}
         if (welcome) await typeOut(splitChunks(welcome));
+        // prereqs 체크리스트 카드 (학습자가 전체 진행 한눈에 보게)
+        if (prereqs) {
+          setMessages((m) => [
+            ...m,
+            { role: 'assistant', content: '', card: { type: 'prereqs', prereqs, slug: newSlug } },
+          ]);
+        }
         // 빙고 패널 자동 열기
         setMessages((m) => [
           ...m,
@@ -297,6 +314,15 @@ export function HomeChat() {
           } else if (trigger === 'cron') {
             msg = '⏰ cron 트리거 발화 성공! 8번 빙고 통과 ✓';
           }
+        } else if (data.type === 'telegram.registered') {
+          msg = '✅ 텔레그램 연결됐어요! 다음은 슬랙 인증이에요.';
+          // 슬랙 카드 자동
+          cardAfter = { type: 'oauth', agentSlug: slug };
+        } else if (data.type === 'slack.oauth.completed') {
+          const branchCreated = (data.payload as { branchCreated?: boolean } | undefined)?.branchCreated;
+          msg = branchCreated
+            ? '✅ 슬랙 인증 + 본인 브랜치 생성 완료! 이제 코드 받으러 갈 차례예요. 컴퓨터 환경 알려주실래요? (Mac / Windows)'
+            : '✅ 슬랙 인증 완료! 이제 코드 받으러 갈 차례예요. 컴퓨터 환경 알려주실래요? (Mac / Windows)';
         }
         if (msg) {
           insolMessage(msg, cardAfter ?? undefined);
@@ -304,25 +330,18 @@ export function HomeChat() {
         }
       } catch {}
     };
-    for (const t of [
+    const events = [
       'github.push',
       'slack.mention.received',
       'agent.reloaded',
       'tool.called',
       'run.finished',
-    ]) {
-      es.addEventListener(t, handler);
-    }
+      'telegram.registered',
+      'slack.oauth.completed',
+    ];
+    for (const t of events) es.addEventListener(t, handler);
     return () => {
-      for (const t of [
-        'github.push',
-        'slack.mention.received',
-        'agent.reloaded',
-        'tool.called',
-        'run.finished',
-      ]) {
-        es.removeEventListener(t, handler);
-      }
+      for (const t of events) es.removeEventListener(t, handler);
       es.close();
     };
   }, [slug]);
@@ -401,13 +420,23 @@ export function HomeChat() {
       setActiveMissionCell(cell);
     } else if (slug) {
       // 스니펫(복붙용 코드)은 일부러 안 보냄 — 본인이 클로드코드로 직접 깎게 한다.
-      // 다음 한 줄(방향성) 만 안내.
+      // 다음 한 줄(방향성) + 셀별 action(예: 빙고1 → OAuth 카드 자동)만 안내.
       try {
         const res = await fetch(
           `/api/runtime/insol/cell-guide?cell=${cell.id}&agent=${encodeURIComponent(slug)}`,
         );
-        const guide = (await res.json()) as { nextStep?: string };
+        const guide = (await res.json()) as {
+          nextStep?: string;
+          action?: { type: string };
+        };
         if (guide.nextStep) insolMessage(guide.nextStep);
+        // 셀1 OAuth — 클라이언트가 즉시 카드 띄움
+        if (guide.action?.type === 'oauth') {
+          setMessages((m) => [
+            ...m,
+            { role: 'assistant', content: '', card: { type: 'oauth', agentSlug: slug } },
+          ]);
+        }
       } catch {}
     }
   };
@@ -596,26 +625,15 @@ export function HomeChat() {
     lastActivityRef.current = Date.now();
     stuckSentRef.current = false; // 사용자 입력 = 막힘 알림 다시 켜기
 
-    // PAT 자동 감지 + 제출
+    // GitHub PAT 토큰을 채팅에 붙여넣은 경우 — 이제 운영자 PAT 자동화로 학습자 PAT 불필요.
+    // 보안상 토큰만 마스킹해서 화면 표시, 서버 저장 X.
     const patMatch = content.match(/(github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9_]+)/);
-    if (patMatch && slug) {
+    if (patMatch) {
       const masked = patMatch[1]!.slice(0, 14) + '…' + patMatch[1]!.slice(-4);
       setMessages((m) => [...m, { role: 'user', content: content.replace(patMatch[1]!, masked) }]);
-      try {
-        const r = await fetch('/api/runtime/insol/pat-submit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agent: slug, token: patMatch[1] }),
-        });
-        const data = (await r.json()) as { ok?: boolean; message?: string; error?: string };
-        insolMessage(
-          data.ok
-            ? `✅ GitHub Token 받았어요! (${masked})\n운영자에게 전달했어요. 잠시 후 본인 브랜치(learner/${slug})가 자동 생성될 거예요.`
-            : `⚠ ${data.error ?? '제출 실패'}`,
-        );
-      } catch (e) {
-        insolMessage(`⚠ ${(e as Error).message}`);
-      }
+      insolMessage(
+        `토큰 보내주셨네요. 이제 본인 PAT 발급 안 하셔도 돼요 — 운영자 토큰으로 본인 브랜치(learner/${slug ?? '<slug>'})가 슬랙 OAuth 직후 자동 생성됩니다. 슬랙 인증부터 해볼까요?`,
+      );
       return;
     }
 
@@ -827,6 +845,9 @@ export function HomeChat() {
                 {m.card.type === 'theme-picker' && (
                   <ThemePicker themeIds={m.card.themeIds} reason={m.card.reason} />
                 )}
+                {m.card.type === 'prereqs' && (
+                  <PrereqsCard prereqs={m.card.prereqs} slug={m.card.slug} />
+                )}
                 {m.card.type === 'open-bingo-panel' && (
                   <button
                     onClick={() => setSidePanelOpen(true)}
@@ -969,6 +990,63 @@ export function HomeChat() {
     )}
     </div>
     </>
+  );
+}
+
+/** 1주차 선행 단계 체크리스트 — 학습자가 전체 흐름 한눈에 보게 */
+function PrereqsCard({ prereqs, slug }: { prereqs: PrereqsData; slug: string }) {
+  const items: Array<{ label: string; done: boolean; hint?: string }> = [
+    {
+      label: '텔레그램 봇 연결',
+      done: prereqs.telegramOk,
+      hint: prereqs.telegramOk ? undefined : `@rego_agent_bot 에서 /start ${slug}`,
+    },
+    {
+      label: '슬랙 OAuth 인증',
+      done: prereqs.slackOk,
+      hint: prereqs.slackOk ? undefined : '아래 "Slack 인증하기" 카드 클릭',
+    },
+    {
+      label: '본인 브랜치 자동 생성',
+      done: prereqs.branchOk,
+      hint: prereqs.branchOk ? undefined : '슬랙 OAuth 끝나면 자동',
+    },
+    {
+      label: '본인 폴더',
+      done: prereqs.folderOk,
+      hint: prereqs.folderOk ? undefined : '운영자에게 알리기',
+    },
+  ];
+  const doneCount = items.filter((i) => i.done).length;
+  return (
+    <div className="brut p-3 bg-paper">
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-display font-bold text-sm">📋 1주차 준비 상태</div>
+        <div className="font-mono text-[10px] text-muted">{doneCount}/4</div>
+      </div>
+      <ul className="space-y-1.5">
+        {items.map((it, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <span
+              className={`inline-block w-4 h-4 leading-4 text-center text-[11px] font-bold border-2 border-ink ${
+                it.done ? 'bg-ink text-paper' : 'bg-paper text-muted'
+              }`}
+              aria-hidden
+            >
+              {it.done ? '✓' : ''}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className={`text-[12px] ${it.done ? 'text-muted line-through' : 'font-medium'}`}>
+                {it.label}
+              </div>
+              {it.hint && (
+                <div className="font-mono text-[10px] text-muted mt-0.5">→ {it.hint}</div>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

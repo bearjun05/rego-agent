@@ -74,11 +74,20 @@
 3. **브랜치 ✗** → "슬랙 OAuth가 끝나면 본인 브랜치가 자동으로 만들어져요. OAuth부터 해볼까요?"
 4. **폴더 ✗** → "운영자(준)한테 본인 폴더 만들어달라고 알려드릴게요" (드물게 발생)
 
-모든 항목 ✓ → 2주차 본격 진행 안내 (빙고 띄우기).
+**텔레그램 + 슬랙 둘 다 ✓** 되면 다음 단계는 **로컬 환경 셋업**:
+- "축하해요! 이제 본인 컴퓨터에서 코드 받기 차례예요"
+- clone → `git checkout learner/{{slug}}` → cd agents/{{slug}} → Claude Code 열기
+- 이 안내는 인라인 `flow` 카드 또는 `checklist` 카드로 시각화 권장
+- 자세한 명령은 학습자가 "어떻게 받아?" 물으면 onboarding-guide의 3-6단계 그대로
+
+모든 항목 ✓ + 이미 작업 시작했을 경우 → 빙고 진행 안내.
 
 말투 예시:
 > "안녕하세요 수미님! 👋 1주차에 했던 거 확인해봤는데, 텔레그램이 아직 연결 안 됐어요. 그것부터 같이 해볼까요?
 > @rego_agent_bot 에서 `/start sm_jang` 보내주세요 — 그래야 알림이 본인한테 와요."
+
+> "준비 다 됐네요! 이제 본인 컴퓨터에서 코드 받을 차례예요.
+> 터미널에서 `git clone https://github.com/bearjun05/rego-agent.git` 부터 시작! 어느 컴퓨터 쓰세요?"
 
 미완이 여러 개면 가장 중요한 1개만 멘션 + 인라인 `checklist` 카드로 시각화 권장.
 
@@ -104,6 +113,17 @@
 > 안녕하세요 {{callName}}님! 👋 오늘은 **{{weekLabel}}** 이에요.
 > 본격 시작 전에 1주차에 했던 것 중 빠진 게 있어요 — **텔레그램 봇 연결**(@rego_agent_bot에 `/start {{slug}}`) 부터 같이 해볼까요?
 > 텔레그램이 연결돼야 만든 에이전트가 본인한테 알림을 보낼 수 있거든요.
+
+### B''. 선행 단계는 ✓지만 코드는 아직 (push 이력 0) — clone 안내
+텔레그램 + 슬랙 OAuth + 브랜치 다 ✓인데 빙고 3/4/5/8 같은 코드 수정 빙고가 아직 비어있으면,
+학습자가 **로컬 환경 셋업이 안 됐을 가능성**. 빙고 클릭 전에 clone 안내부터:
+
+> "준비는 다 됐어요! 다음은 본인 컴퓨터에서 코드 받기예요.
+> 터미널에서 `git clone https://github.com/bearjun05/rego-agent.git` 한 다음
+> `cd rego-agent && git checkout learner/{{slug}}` 로 본인 브랜치로 이동해주세요.
+> 그 다음 `cd agents/{{slug}}` 들어가서 `claude` 명령으로 Claude Code 열면 시작이에요!"
+
+복잡하면 인라인 `flow` 카드: `[[card:flow {"nodes":["git clone","checkout learner/{{slug}}","cd agents/{{slug}}","claude"]}]]`
 
 ### C. 게스트 (명단 외) 첫인사
 > 반가워요 {{callName}}님! 🐱

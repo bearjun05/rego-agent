@@ -8,6 +8,7 @@ import { signState, verifyState } from '../crypto.js';
 import { buildSlackAuthorizeUrl, exchangeCode } from '../slack-oauth.js';
 import { saveUserToken } from '../slack-tokens.js';
 import { ensureLearnerBranch } from '../github-api.js';
+import { getEventBus } from '../event-bus.js';
 
 /**
  * D5 본인 확인 — 콜백에서 받은 slack user id가 그 agent 슬롯의 등록된 user id와 일치하는지.
@@ -118,12 +119,14 @@ export function createOAuthApi() {
       log.info(`oauth connected: agent=${agent} user=${u.id}`);
 
       // T6: 학습자 브랜치 자동 생성 (실패해도 OAuth는 성공으로 처리)
+      let branchCreated = false;
       const gh = process.env.GITHUB_TOKEN;
       if (gh) {
         try {
           const r = await ensureLearnerBranch(agent, gh);
           if (r.created) {
             log.info(`learner branch created: learner/${agent}`);
+            branchCreated = true;
             // branch 캐시 무효화 — bootstrap prereqs가 즉시 ✓로 반영
             const { invalidateBranchCache } = await import('../learner-status.js');
             invalidateBranchCache();
@@ -136,6 +139,15 @@ export function createOAuthApi() {
       } else {
         log.debug('GITHUB_TOKEN not set, skipping branch creation');
       }
+
+      // SSE — 인솔이 채팅이 즉시 반응 ("슬랙 연결됐어요!" → 다음 단계 안내)
+      await getEventBus()
+        .publish({
+          type: 'slack.oauth.completed',
+          agentName: agent,
+          payload: { slackUserId: u.id, branchCreated },
+        })
+        .catch(() => {});
       return c.html(page('연결 완료 ✅', `${escapeHtml(agent)} 님의 Slack이 연결됐어요. 이제 비공개 채널 멘션도 처리됩니다. 창을 닫아도 됩니다.`));
     } catch (err) {
       log.error('oauth callback error', err);

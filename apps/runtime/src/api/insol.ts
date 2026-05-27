@@ -8,6 +8,7 @@ import {
   listPendingPats,
   buildBlueprint,
 } from '../insol-analyzer.js';
+import { loadPrereqsForSlug } from '../learner-status.js';
 import { type CellId } from '../bingo-rules.js';
 import { createLogger } from '../logger.js';
 
@@ -68,6 +69,14 @@ export function createInsolApi() {
   r.get('/pat-pending', async (c) => {
     const list = await listPendingPats();
     return c.json({ pending: list });
+  });
+
+  /** 학습자 1주차 선행 단계 현황 — SSE 알림 받고 클라가 재조회 */
+  r.get('/prereqs', async (c) => {
+    const slug = c.req.query('slug');
+    if (!slug) return c.json({ error: 'slug 필요' }, 400);
+    const prereqs = await loadPrereqsForSlug(slug);
+    return c.json({ prereqs });
   });
 
   return r;

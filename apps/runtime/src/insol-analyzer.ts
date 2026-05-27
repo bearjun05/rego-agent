@@ -189,6 +189,8 @@ export interface CellGuidance {
   nextStep: string;
   /** 복붙 가능한 코드 스니펫 (없을 수 있음) */
   snippet?: string;
+  /** 클라이언트가 자동 표시할 카드 액션 (셀 1 → oauth) */
+  action?: { type: 'oauth' | 'reload' } & Record<string, unknown>;
 }
 
 const SNIPPETS: Partial<Record<CellId, string>> = {
@@ -241,8 +243,12 @@ async onCron(event, ctx) {
 export async function buildCellGuidance(cell: CellId, agent: string): Promise<CellGuidance> {
   const def = CELL_DEFS[cell];
   let nextStep = def.description;
+  let action: CellGuidance['action'];
 
-  if (cell === 3 || cell === 4 || cell === 5 || cell === 8) {
+  if (cell === 1) {
+    nextStep = '슬랙 OAuth 카드를 띄워둘게요. 인증 끝나면 본인 브랜치도 자동 생성돼요.';
+    action = { type: 'oauth' };
+  } else if (cell === 3 || cell === 4 || cell === 5 || cell === 8) {
     // 학습자 코드 보고 이미 했는지 점검
     const code = await loadLearnerCode(agent);
     if (cell === 3 && code.usedTools.includes('slack.reactions_add')) {
@@ -261,6 +267,7 @@ export async function buildCellGuidance(cell: CellId, agent: string): Promise<Ce
     hint: def.hint,
     nextStep,
     snippet: SNIPPETS[cell],
+    ...(action ? { action } : {}),
   };
 }
 
