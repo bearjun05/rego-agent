@@ -37,27 +37,41 @@ export default defineHandler({
       }
     }
 
-    // 3) 분류
-    const { category, confidence } = await ctx.llm.classify({
-      text: event.text,
-      categories: [
-        { id: 'question', description: '답변이 필요한 질문' },
-        { id: 'request', description: '작업 요청' },
-        { id: 'schedule', description: '일정/회의 조율' },
-        { id: 'info', description: '정보 공유, 답변 필요 X' },
-      ],
-      prompt: classifyPrompt,
-    });
+    // 3) 분류 — LLM 실패해도 기본값으로 계속 진행
+    let category = 'info';
+    let confidence = 0;
+    try {
+      const classified = await ctx.llm.classify({
+        text: event.text,
+        categories: [
+          { id: 'question', description: '답변이 필요한 질문' },
+          { id: 'request', description: '작업 요청' },
+          { id: 'schedule', description: '일정/회의 조율' },
+          { id: 'info', description: '정보 공유, 답변 필요 X' },
+        ],
+        prompt: classifyPrompt,
+      });
+      category = classified.category;
+      confidence = classified.confidence;
+    } catch (e) {
+      ctx.logger.warn('LLM 분류 실패 → 기본값(info) 사용', { e });
+    }
 
-    // 4) 한 줄 요약 (스레드 맥락 있으면 포함)
+    // 4) 한 줄 요약 — LLM 실패 시 원문 앞부분으로 대체
     const summaryPrompt = threadContext
       ? `[스레드 맥락]\n${threadContext}\n\n[멘션 내용]\n${event.text}\n\n위를 바탕으로 핵심만 한 문장(30자 이내)으로 요약해. 존댓말 없이 간결하게.`
       : `다음 슬랙 메시지를 핵심만 담아 한 문장(30자 이내)으로 요약해. 존댓말 없이 간결하게.\n\n${event.text}`;
 
-    const { text: summary } = await ctx.llm.generate({
-      prompt: summaryPrompt,
-      maxTokens: 60,
-    });
+    let summary = event.text.slice(0, 30).trim();
+    try {
+      const { text: generated } = await ctx.llm.generate({
+        prompt: summaryPrompt,
+        maxTokens: 60,
+      });
+      summary = generated;
+    } catch (e) {
+      ctx.logger.warn('LLM 요약 실패 → 원문 앞부분 사용', { e });
+    }
 
     // 5) 텔레그램 버튼 메시지
     const categoryEmoji: Record<string, string> = {
