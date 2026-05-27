@@ -10,18 +10,6 @@ export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
-    // 멘션을 봤다는 신호로 원문에 👀 즉시 달기 (요약 전에)
-    try {
-      await ctx.tools['slack.reactions_add']!({
-        channel: event.channel,
-        ts: event.ts,
-        name: 'eyes',
-      });
-    } catch (err) {
-      // 이미 달린 이모지 등은 무시 — 알림 흐름을 막지 않도록
-      ctx.logger.warn('eyes 반응 추가 실패', { err: String(err) });
-    }
-
     // 본문에 박힌 슬랙 토큰(<@U123>, <#C123|name>, <!here>)을 사람이 읽을 이름으로 변환.
     // 요약 "전"에 변환해야 LLM 요약문에도 ID 대신 이름이 들어간다.
     const resolveRefs = async (raw: string): Promise<string> => {
