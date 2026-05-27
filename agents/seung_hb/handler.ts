@@ -10,8 +10,10 @@ export default defineHandler({
       channel: event.channel,
       timestamp: event.ts,
       emoji: 'eyes',
-    }).catch((err: unknown) => {
-      ctx.logger.warn('add_reaction 실패', { error: String(err) });
+    }).catch(async (err: unknown) => {
+      await ctx.tools['telegram.send']!({
+        text: `이모지 실패: ${String(err)}`,
+      });
     });
   },
 });
