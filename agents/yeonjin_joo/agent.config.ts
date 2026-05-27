@@ -27,8 +27,10 @@ export default defineAgent({
     'telegram.answer_callback', // 버튼 클릭 ack (빙고 4)
     'telegram.edit_message', // 버튼 누른 결과로 메시지 수정 (빙고 4)
     'slack.reactions_add', // 멘션에 자동 👀 (빙고 3)
-    'slack.users_info', // 사용자 ID → 이름 (빙고 5)
+    'slack.users_info', // 사용자 ID → 이름 (빙고 5·7)
     'slack.conversations_info', // 채널 ID → 채널명 (빙고 5)
+    'slack.reactions_list', // 이모지 BEST 5 분석 (빙고 6)
+    'slack.search_messages', // 태그 BEST 3 분석 (빙고 7)
   ],
 
   // 모델 선택은 선택사항 (런타임 기본값 사용)
