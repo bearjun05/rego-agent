@@ -23,7 +23,8 @@ import { loadLearnerCode, buildOperatorOverview } from '../insol-analyzer.js';
 import { currentWeek, weekLabel } from '../study-week.js';
 import { buildInsolStaticPrompt } from '../insol-prompt.js';
 import { loadAllPrereqs, type LearnerPrereqs } from '../learner-status.js';
-import type { ToolDef, ToolCall } from '@rego/tools/llm';
+import { KNOWLEDGE_TOOLS, KNOWLEDGE_TOOL_NAMES, invokeKnowledgeTool } from '../insol-tools.js';
+import type { ToolDef, ToolCall, OpenRouterMessage } from '@rego/tools/llm';
 
 const log = createLogger('chat');
 
@@ -205,7 +206,8 @@ export function createChatApi() {
     // ─────────────────────────────────────────────────────────
     //  Tool 정의 — 카드 첨부를 모델이 결정
     // ─────────────────────────────────────────────────────────
-    const tools: ToolDef[] = [
+    // UI action 도구 (클라이언트가 카드 렌더, LLM에 결과 안 돌려보냄)
+    const uiTools: ToolDef[] = [
       {
         type: 'function',
         function: {
@@ -281,30 +283,77 @@ export function createChatApi() {
       },
     ];
 
+    // Knowledge 도구 (.md 가이드 fetch — LLM에 결과 돌려보냄, multi-pass)
+    const tools: ToolDef[] = [...uiTools, ...KNOWLEDGE_TOOLS];
+
     try {
-      const { result } = await callOpenRouter({
-        apiKey: cfg.OPENROUTER_API_KEY,
-        model: cfg.MODEL_CHAT,
-        system,
-        messages: history.map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
-        temperature: 0.7,
-        maxTokens: 800,
-        tools,
-        toolChoice: 'auto',
-      });
-      const message = result.choices[0]?.message;
-      const answer = message?.content ?? '';
-      const toolCalls = message?.tool_calls ?? [];
+      // multi-pass tool loop — knowledge 도구 호출되면 결과 받아 다음 패스.
+      const llmMessages: OpenRouterMessage[] = history.map((h) => ({
+        role: h.role as 'user' | 'assistant',
+        content: h.content,
+      }));
+      const accumulatedActions: Array<{ type: string; [k: string]: unknown }> = [];
+      let totalCostUsd = 0;
+      let answer = '';
+      const MAX_ITERATIONS = 3;
+      let iteration = 0;
 
-      // Tool calls → actions[] (클라이언트가 카드 렌더링)
-      const actions = toolCalls
-        .map((tc: ToolCall) => parseToolCallToAction(tc, agentName))
-        .filter(Boolean);
+      while (iteration < MAX_ITERATIONS) {
+        const { result } = await callOpenRouter({
+          apiKey: cfg.OPENROUTER_API_KEY,
+          model: cfg.MODEL_CHAT,
+          system,
+          messages: llmMessages,
+          temperature: 0.7,
+          maxTokens: 800,
+          tools,
+          toolChoice: 'auto',
+        });
+        const message = result.choices[0]?.message;
+        const toolCalls = message?.tool_calls ?? [];
 
-      const costUsd =
-        result.usage?.cost ??
-        ((result.usage?.prompt_tokens ?? 0) * 3 + (result.usage?.completion_tokens ?? 0) * 15) /
-          1_000_000;
+        totalCostUsd +=
+          result.usage?.cost ??
+          ((result.usage?.prompt_tokens ?? 0) * 3 + (result.usage?.completion_tokens ?? 0) * 15) /
+            1_000_000;
+
+        // UI action 도구 → accumulate (클라이언트 렌더)
+        // Knowledge 도구 → 결과 LLM에 다시 입력
+        const knowledgeCalls = toolCalls.filter((tc) => KNOWLEDGE_TOOL_NAMES.has(tc.function.name));
+        const uiCalls = toolCalls.filter((tc) => !KNOWLEDGE_TOOL_NAMES.has(tc.function.name));
+
+        for (const tc of uiCalls) {
+          const action = parseToolCallToAction(tc, agentName);
+          if (action) accumulatedActions.push(action);
+        }
+
+        // knowledge 도구 호출 없으면 종료
+        if (knowledgeCalls.length === 0) {
+          answer = message?.content ?? '';
+          break;
+        }
+
+        // knowledge 도구 결과를 LLM에 입력하기 위해 메시지 누적
+        llmMessages.push({
+          role: 'assistant',
+          content: message?.content ?? null,
+          tool_calls: message?.tool_calls,
+        });
+        for (const tc of knowledgeCalls) {
+          const guideContent = invokeKnowledgeTool(tc.function.name);
+          llmMessages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: guideContent,
+          });
+        }
+        iteration++;
+      }
+
+      // 최대 iteration 도달했는데도 답변 없으면 마지막 응답 텍스트 사용 또는 fallback
+      if (!answer && iteration >= MAX_ITERATIONS) {
+        answer = '도구 결과를 종합 중인데 잠깐 정리가 필요해요. 다시 한 번 물어봐 주실래요?';
+      }
 
       await db.insert(chatMessages).values({
         sessionId,
@@ -312,10 +361,16 @@ export function createChatApi() {
         role: 'assistant',
         content: answer,
         contextSnapshot: context,
-        costUsd: costUsd.toFixed(6),
+        costUsd: totalCostUsd.toFixed(6),
       });
 
-      return c.json({ answer, actions, costUsd, model: cfg.MODEL_CHAT });
+      return c.json({
+        answer,
+        actions: accumulatedActions,
+        costUsd: totalCostUsd,
+        model: cfg.MODEL_CHAT,
+        iterations: iteration + 1,
+      });
     } catch (err) {
       log.error('chat failed', err);
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);

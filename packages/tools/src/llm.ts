@@ -56,11 +56,22 @@ export interface ToolCall {
   };
 }
 
+/**
+ * OpenAI 호환 메시지 형태 — tool calling 라운드트립 지원.
+ *  - system / user / assistant: 일반 대화
+ *  - assistant + tool_calls: 도구 호출
+ *  - tool: 도구 결과 (tool_call_id로 assistant tool_calls와 연결)
+ */
+export type OpenRouterMessage =
+  | { role: 'system' | 'user'; content: string }
+  | { role: 'assistant'; content: string | null; tool_calls?: ToolCall[] }
+  | { role: 'tool'; tool_call_id: string; content: string };
+
 export interface OpenRouterCallParams {
   apiKey: string;
   model: string;
   system?: string;
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  messages: OpenRouterMessage[];
   temperature?: number;
   maxTokens?: number;
   responseFormat?: 'text' | 'json';
