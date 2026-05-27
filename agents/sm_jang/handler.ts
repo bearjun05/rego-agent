@@ -22,6 +22,12 @@ export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
+    await ctx.tools['slack.reactions_add']!({
+      channel: event.channel,
+      ts: event.ts,
+      name: 'eyes',
+    });
+
     const { summary, candidates } = await ctx.llm.generateJson(
       event.text,
       replySchema,
