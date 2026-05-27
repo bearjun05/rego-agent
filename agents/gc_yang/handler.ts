@@ -66,20 +66,6 @@ export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 수신', { text: event.text.slice(0, 80) });
 
-    // 0) 👀 자동 반응 — "봤어요" 신호. 분석 전에 즉시 달아 응답 지연 체감 최소화.
-    //    실패해도 본 흐름은 막지 않음 (이미 같은 이모지가 달려 있어도 에러 무시).
-    try {
-      await ctx.tools['slack.reactions_add']!({
-        channel: event.channel,
-        ts: event.ts,
-        name: 'eyes',
-      });
-    } catch (err) {
-      ctx.logger.warn('reactions_add 실패 (무시하고 진행)', {
-        err: err instanceof Error ? err.message : String(err),
-      });
-    }
-
     // 1) 분석 — 분류 + 우선순위 + 요약 + 원탁 판단을 한 번의 LLM 호출로
     const analysis = await analyze(event, ctx);
 

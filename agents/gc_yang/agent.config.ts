@@ -32,6 +32,5 @@ export default defineAgent({
     'telegram.send',
     'telegram.edit_message',
     'telegram.answer_callback',
-    'slack.reactions_add',
   ],
 });
