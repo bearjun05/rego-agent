@@ -5,9 +5,15 @@ export default defineHandler({
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
     // 1. 텔레그램 알림 먼저 (다른 단계 실패 여부와 무관하게 보장)
+    // 빙고 5: 슬랙 API로 실제 이름 조회
+    const userInfo = await ctx.tools['slack.users_info']!({ user: event.user });
+    const channelInfo = await ctx.tools['slack.conversations_info']!({ channel: event.channel });
+    const userName = userInfo.user?.real_name ?? userInfo.user?.name ?? event.user;
+    const channelName = channelInfo.channel?.name ?? event.channel;
+
     const lines = [
-      `*from:* ${event.userName ?? event.user}`,
-      `*ch:* #${event.channelName ?? event.channel}`,
+      `*from:* ${userName}`,
+      `*ch:* #${channelName}`,
       ``,
       event.text,
     ];
