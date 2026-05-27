@@ -105,6 +105,10 @@ export function HomeChat() {
   const startedRef = useRef(false);
   /** 막힘 알림 한 번 보냈는지 — 사용자 입력 들어올 때까지 재발송 X */
   const stuckSentRef = useRef(false);
+  /** 빙고 버튼 더블클릭 가드 — 같은 셀에 in-flight 요청 있으면 무시 (cellId set) */
+  const inFlightCellsRef = useRef<Set<number>>(new Set());
+  /** 셀 클릭(mission 카드 표시)도 짧은 시간 내 중복 차단 (cellId → lastClickAt) */
+  const cellClickAtRef = useRef<Map<number, number>>(new Map());
 
   useEffect(() => {
     // 채팅 박스 내부만 스크롤 — 페이지 전체 강제 스크롤은 사용자 시선을 빼앗아서 X
@@ -408,6 +412,12 @@ export function HomeChat() {
   }, [slug, stage, busy, typing]);
 
   const handleBingoCellClick = async (cell: CellDef, status: CellStatus) => {
+    // 더블클릭 가드 — 같은 셀을 1.5초 내 다시 누르면 무시 (mission 카드/가이드 중복 표시 방지)
+    const now = Date.now();
+    const last = cellClickAtRef.current.get(cell.id) ?? 0;
+    if (now - last < 1500) return;
+    cellClickAtRef.current.set(cell.id, now);
+
     if (status === 'done') {
       setMessages((m) => [
         ...m,
@@ -446,6 +456,9 @@ export function HomeChat() {
 
   const verifyCell = async (cell: CellDef | null) => {
     if (!cell || !slug) return;
+    // ★ 더블클릭 가드 — 같은 셀에 in-flight 검증이 있으면 즉시 무시 (ref로 setState 비동기 우회)
+    if (inFlightCellsRef.current.has(cell.id)) return;
+    inFlightCellsRef.current.add(cell.id);
     setBusy(true);
     try {
       const r = await fetch('/api/runtime/bingo/verify', {
@@ -481,11 +494,15 @@ export function HomeChat() {
       ]);
     } finally {
       setBusy(false);
+      inFlightCellsRef.current.delete(cell.id);
     }
   };
 
   const claimChatCell = async (cell: CellDef, text: string) => {
     if (!slug) return;
+    // ★ 더블클릭 가드 — chat_input 셀에 in-flight claim 있으면 즉시 무시
+    if (inFlightCellsRef.current.has(cell.id)) return;
+    inFlightCellsRef.current.add(cell.id);
     setBusy(true);
     try {
       const r = await fetch('/api/runtime/bingo/claim', {
@@ -519,6 +536,7 @@ export function HomeChat() {
       ]);
     } finally {
       setBusy(false);
+      inFlightCellsRef.current.delete(cell.id);
     }
   };
 
@@ -827,9 +845,10 @@ export function HomeChat() {
                     ) : (
                       <button
                         onClick={() => verifyCell(m.card && m.card.type === 'mission' ? m.card.cell : null)}
-                        className="btn btn-primary text-xs"
+                        disabled={busy}
+                        className="btn btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        미션 완성하기 →
+                        {busy ? '확인 중…' : '미션 완성하기 →'}
                       </button>
                     )}
                   </div>
