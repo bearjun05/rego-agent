@@ -136,4 +136,50 @@ export default defineHandler({
       parseMode: 'Markdown',
     });
   },
+
+  async onManual(event, ctx) {
+    ctx.logger.info('이모지 BEST 5 분석 시작 (최근 30일)');
+
+    const since = Math.floor(Date.now() / 1000) - 30 * 86400;
+    const counts = new Map<string, number>();
+    const PAGES = 5;
+    let scanned = 0;
+    let counted = 0;
+    let stop = false;
+
+    for (let page = 1; page <= PAGES && !stop; page++) {
+      const { items } = await ctx.tools['slack.reactions_list']!({ count: 100, page });
+      if (!items.length) break;
+      scanned += items.length;
+
+      for (const item of items as Array<{ message?: { ts?: string; reactions?: Array<{ name: string; count: number }> }; file?: { timestamp?: number; reactions?: Array<{ name: string; count: number }> } }>) {
+        const ts = Number(item.message?.ts ?? item.file?.timestamp ?? 0);
+        if (ts && ts < since) { stop = true; break; }
+        const reactions = item.message?.reactions ?? item.file?.reactions ?? [];
+        for (const r of reactions) {
+          counts.set(r.name, (counts.get(r.name) ?? 0) + r.count);
+        }
+        counted++;
+      }
+      if (items.length < 100) break;
+    }
+
+    const top5 = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    ctx.logger.info('이모지 BEST 5', { scanned, counted, top5 });
+
+    const lines = [
+      `🎨 *내 슬랙 이모지 BEST 5* (최근 30일)`,
+      ``,
+      `_스캔 ${scanned}개 → 30일 내 ${counted}개 집계_`,
+      ``,
+      ...top5.map(([name, n], i) => `${['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i]} :${name}: \`${n}회\``),
+    ];
+
+    await ctx.tools['telegram.send']!({
+      text: lines.join('\n'),
+      parseMode: 'Markdown',
+    });
+
+    return { scanned, counted, top5 };
+  },
 });
