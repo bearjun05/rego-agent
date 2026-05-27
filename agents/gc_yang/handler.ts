@@ -51,6 +51,16 @@ interface PendingItem {
 const PENDING_KEY = 'pending';
 const PENDING_CAP = 50; // 최근 50건만 유지
 
+// ── 인라인 버튼 (확인/패스) ──────────────────────────────────
+const REPLY_KEYBOARD = {
+  inline_keyboard: [
+    [
+      { text: '✅ 확인', callback_data: 'ack' },
+      { text: '⏭ 패스', callback_data: 'pass' },
+    ],
+  ],
+};
+
 export default defineHandler({
   /** 슬랙에서 본인이 태그될 때 */
   async onSlackMention(event, ctx) {
@@ -73,10 +83,11 @@ export default defineHandler({
     // 1) 분석 — 분류 + 우선순위 + 요약 + 원탁 판단을 한 번의 LLM 호출로
     const analysis = await analyze(event, ctx);
 
-    // 2) 텔레그램 알림 전송
+    // 2) 텔레그램 알림 전송 (인라인 버튼 — 확인/패스)
     await ctx.tools['telegram.send']!({
       text: buildAlert(event, analysis),
       parseMode: 'Markdown',
+      replyMarkup: REPLY_KEYBOARD,
     });
 
     // 3) 미처리 건 누적 (info 는 다이제스트에서 제외)
@@ -93,6 +104,43 @@ export default defineHandler({
     }
 
     return analysis ?? { category: 'unknown', note: 'LLM 분석 실패 — 원문만 전달' };
+  },
+
+  /** 텔레그램 인라인 버튼 클릭 (확인/패스) */
+  async onTelegramCallback(event, ctx) {
+    ctx.logger.info('텔레그램 콜백 수신', { data: event.data, messageId: event.messageId });
+
+    const decided = event.data === 'ack'
+      ? { mark: '✅ 확인됨', toast: '확인 처리' }
+      : event.data === 'pass'
+        ? { mark: '⏭ 패스', toast: '패스 처리' }
+        : { mark: `↪︎ ${event.data}`, toast: '처리됨' };
+
+    // 1) toast ack 먼저 (텔레그램 spinner 멈춤)
+    await ctx.tools['telegram.answer_callback']!({
+      callbackQueryId: event.callbackQueryId,
+      text: decided.toast,
+    });
+
+    // 2) 원문 끝에 결과 줄 추가 + 버튼 제거
+    const stamp = new Date().toLocaleTimeString('ko-KR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'Asia/Seoul',
+    });
+    const base = event.messageText ?? '_(원문 없음)_';
+    const newText = `${base}\n\n━━━━━━━━━━━━\n${decided.mark} · ${stamp}`;
+
+    await ctx.tools['telegram.edit_message']!({
+      chatId: event.chatId,       // 안전망: 도구가 본인 chat 강제. 그대로 넘겨도 무시됨.
+      messageId: event.messageId,
+      text: newText,
+      parseMode: 'Markdown',
+      replyMarkup: { inline_keyboard: [] }, // 버튼 제거
+    });
+
+    return { decided: event.data };
   },
 
   /** 대시보드 "수동 실행" 버튼 → 미처리 건 다이제스트 */
