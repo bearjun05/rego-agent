@@ -12,11 +12,17 @@ export default defineHandler({
     });
 
     // 1. 텔레그램 알림 먼저 (다른 단계 실패 여부와 무관하게 보장)
-    // 빙고 5: 슬랙 API로 실제 이름 조회
-    const userInfo = await ctx.tools['slack.users_info']!({ user: event.user });
-    const channelInfo = await ctx.tools['slack.conversations_info']!({ channel: event.channel });
-    const userName = userInfo.user?.real_name ?? userInfo.user?.name ?? event.user;
-    const channelName = channelInfo.channel?.name ?? event.channel;
+    // 빙고 5: 슬랙 API로 실제 이름 조회 (실패 시 기존 값 폴백)
+    let userName = event.userName ?? event.user;
+    let channelName = event.channelName ?? event.channel;
+    try {
+      const userInfo = await ctx.tools['slack.users_info']!({ user: event.user });
+      userName = userInfo.user?.real_name ?? userInfo.user?.name ?? userName;
+    } catch { /* 스모크/가짜 유저 등 조회 실패 시 무시 */ }
+    try {
+      const channelInfo = await ctx.tools['slack.conversations_info']!({ channel: event.channel });
+      channelName = channelInfo.channel?.name ?? channelName;
+    } catch { /* 스모크/가짜 채널 등 조회 실패 시 무시 */ }
 
     const lines = [
       `*from:* ${userName}`,
