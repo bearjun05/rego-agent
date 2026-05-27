@@ -89,8 +89,6 @@ const greetingScript = [
   '이름이 뭐예요? (예: "최웅준" 또는 그냥 "웅준")',
 ];
 
-const SUGGESTIONS = ['답장 자동으로 하려면?', '버튼 메시지 어떻게 만들어?', '내 폴더 어디서 시작해?'];
-
 export function HomeChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -732,9 +730,6 @@ export function HomeChat() {
     await askCoach(content, sessionRef.current, slug, given);
   };
 
-  const showSuggestions =
-    stage === 'chatting' && !busy && !typing && messages.filter((m) => m.role === 'user').length === 0;
-
   const doneCount = prevCellsRef.current
     ? Object.values(prevCellsRef.current).filter((s) => s === 'done').length
     : 0;
@@ -972,19 +967,6 @@ export function HomeChat() {
           </div>
         )}
 
-        {showSuggestions && (
-          <div className="flex flex-wrap gap-2 pt-2">
-            {SUGGESTIONS.map((s) => (
-              <button
-                key={s}
-                onClick={() => handleSubmit(s)}
-                className="font-mono text-xs px-3 py-1.5 border-2 border-ink bg-paper hover:bg-ink hover:text-paper transition-colors"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       <form
