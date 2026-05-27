@@ -1,4 +1,4 @@
-import { defineHandler, z } from '@rego/runtime-sdk';
+import { defineHandler, z, type AgentContext } from '@rego/runtime-sdk';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -6,6 +6,37 @@ import path from 'node:path';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const classifyPrompt = await readFile(path.join(here, 'prompts/classify.md'), 'utf8');
 const draftPrompt = await readFile(path.join(here, 'prompts/draft.md'), 'utf8');
+
+/** [빙고 5] 슬랙 ID(U.../C...)를 사람 이름·채널명으로 변환. 실패해도 event 값으로 폴백. */
+async function resolveNames(
+  event: { user: string; userName?: string; channel: string; channelName?: string },
+  ctx: AgentContext,
+): Promise<{ userLabel: string; channelLabel: string }> {
+  let userLabel = event.userName ?? event.user;
+  let channelLabel = event.channelName ?? event.channel;
+
+  try {
+    const u = (await ctx.tools['slack.users_info']!({ user: event.user })) as {
+      name?: string;
+      real_name?: string;
+      display_name?: string;
+    };
+    userLabel = u.display_name || u.real_name || u.name || userLabel;
+  } catch (err) {
+    ctx.logger.warn('slack.users_info 실패 — event 값으로 폴백', { err: String(err) });
+  }
+
+  try {
+    const c = (await ctx.tools['slack.conversations_info']!({ channel: event.channel })) as {
+      name?: string;
+    };
+    channelLabel = c.name || channelLabel;
+  } catch (err) {
+    ctx.logger.warn('slack.conversations_info 실패 — event 값으로 폴백', { err: String(err) });
+  }
+
+  return { userLabel, channelLabel };
+}
 
 const CATEGORY_META: Record<string, { emoji: string; label: string }> = {
   question: { emoji: '❓', label: '질문' },
@@ -29,6 +60,9 @@ export default defineHandler({
       ctx.logger.warn('add_reaction 실패', { err: String(err) });
     }
 
+    // [빙고 5] 슬랙 ID → 이름·채널명 변환 (분류와 병렬 가능하지만 가독성 위해 순차)
+    const { userLabel, channelLabel } = await resolveNames(event, ctx);
+
     // 1) 분류
     const { category, confidence, reason } = await ctx.llm.classify({
       text: event.text,
@@ -46,8 +80,8 @@ export default defineHandler({
       [
         draftPrompt,
         ``,
-        `보낸이: ${event.userName ?? event.user}`,
-        `채널: #${event.channelName ?? event.channel}`,
+        `보낸이: ${userLabel}`,
+        `채널: #${channelLabel}`,
         `분류: ${category}`,
         ``,
         `원문:`,
@@ -64,8 +98,8 @@ export default defineHandler({
     const lines = [
       `${meta.emoji} *${meta.label}*${confidence >= 0.7 ? '' : ' (애매)'}`,
       ``,
-      `*from:* ${event.userName ?? event.user}`,
-      `*ch:* #${event.channelName ?? event.channel}`,
+      `*from:* ${userLabel}`,
+      `*ch:* #${channelLabel}`,
       ``,
       `*요약:* ${summary}`,
     ];
