@@ -32,6 +32,7 @@ const MAP: Record<string, ToolLabel> = {
   'telegram.edit_message': { label: '텔레그램 메시지 고치기', category: 'telegram', hint: '이미 보낸 메시지를 수정' },
   'telegram.send_buttons': { label: '텔레그램 버튼 보내기', category: 'telegram' },
   'telegram.send_with_buttons': { label: '텔레그램 버튼 보내기', category: 'telegram' },
+  'telegram.send_with_button': { label: '텔레그램 버튼 보내기', category: 'telegram' },
   'telegram.answer_callback': { label: '텔레그램 버튼 응답', category: 'telegram' },
 
   // ── LLM ───────────────────────────────────────────

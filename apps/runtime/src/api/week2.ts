@@ -174,50 +174,51 @@ function maskPII(text: string): string {
 }
 
 /**
- * 메시지 묶음에서 비개발자에게 의미 있는 "기능 태그" 추출.
- * 규칙 기반 — LLM 호출 없이 빠른 패턴 매칭.
+ * 메시지 묶음에서 학습자가 "직접 만든 기능"을 보수적으로 추출.
+ * 기본은 태그 없음(=원본 그대로 포워딩). 명확한 가공 흔적이 있을 때만 태그 부여.
  *
- * 태그 예시:
- *   "발신자 이름으로 표시", "채널명으로 표시", "분류 라벨", "버튼 첨부",
- *   "요약 형태", "이모지 추가", "내용 다듬음", "한국어 변환"
+ * false positive 방지가 핵심 — 학습자가 아직 안 만들었는데
+ * 자동으로 태그 붙으면 "이미 한 것처럼" 보이니까.
  */
 function extractFeatureTags(messages: string[]): string[] {
   if (messages.length === 0) return [];
   const tags = new Set<string>();
   const joined = messages.join('\n');
 
-  // 사용자/채널 ID가 마스킹 후에도 보이면 = 이름 변환 미적용
-  // 마스킹 후 U***/C*** 가 있다는 건 원본에 raw ID가 있었다는 뜻
-  const hasRawUserId = /U\*{3}/.test(joined);
-  const hasRawChannelId = /C\*{3}/.test(joined);
-  if (!hasRawUserId) tags.add('발신자 이름으로 표시');
-  if (!hasRawChannelId) tags.add('채널명으로 표시');
+  // ① 발신자 이름으로 표시
+  // "이름:" / "이름님" / "[이름]" / "by 이름" 패턴 + raw user ID(U***)가 절대 없어야.
+  const hasUserId = /U\*{3}|U[A-Z0-9]{8,}/.test(joined);
+  const looksLikeName =
+    /\b(?:from|by)\s+[가-힣A-Za-z]{2,}\b/i.test(joined) ||
+    /^[가-힣]{2,4}\s*[:：님]/m.test(joined) ||
+    /\[[가-힣]{2,4}\]/.test(joined);
+  if (!hasUserId && looksLikeName) tags.add('발신자 이름으로 표시');
 
-  // 분류 라벨 — [질문] / [요청] / [일정] / [참고] 같은 패턴
+  // ② 채널명으로 표시
+  // `#채널명` 형태가 명시적으로 있어야 + raw channel id(C***) 없어야.
+  const hasChannelId = /C\*{3}|C[A-Z0-9]{8,}/.test(joined);
+  const looksLikeChannel = /#[가-힣A-Za-z0-9_-]{2,}/.test(joined);
+  if (!hasChannelId && looksLikeChannel) tags.add('채널명으로 표시');
+
+  // ③ 분류 라벨 — [질문]/[요청]/[일정]/[참고] 같은 명시적 라벨
   if (/\[(질문|요청|일정|참고|info|question|request|schedule|task)\]/i.test(joined)) {
     tags.add('분류 라벨');
   }
 
-  // 버튼 첨부 — 대부분의 텔레그램 메시지 단위로는 별도 필드라 표시 안 됨.
-  // 휴리스틱: "✅", "❌", "→", "버튼" 같은 흔적 또는 callback 데이터 마커
-  if (/(\b답변\b|\b확인\b|\b미루기\b|\b넘기기\b).*\|/.test(joined) || /\b\[버튼\]/.test(joined)) {
-    tags.add('버튼 첨부');
-  }
+  // ④ 이모지 추가 — 의미 있는 개수(메시지 평균 1개 이상)
+  const emojiCount = (joined.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu) || []).length;
+  if (emojiCount >= messages.length) tags.add('이모지 추가');
 
-  // 이모지 추가 — 이모지 1개라도 있으면
-  if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(joined)) {
-    tags.add('이모지 추가');
-  }
+  // ⑤ 내용 다듬음 — 마크다운 강조(`**bold**`) 명확히 사용 OR 리스트 마커 2줄 이상
+  const hasBold = /\*\*[^*\n]{2,}\*\*/.test(joined);
+  const listLines = (joined.match(/^[-•]\s\S/gm) || []).length;
+  if (hasBold || listLines >= 2) tags.add('내용 다듬음');
 
-  // 줄바꿈/마크다운 — `**`, `*`, `-` 리스트 마커
-  if (/\n{2,}/.test(joined) || /\*\*[^*]+\*\*/.test(joined) || /^[-•]\s/m.test(joined)) {
-    tags.add('내용 다듬음');
+  // ⑥ 한 줄 요약 — 메시지가 짧고(80자 이하) + 줄바꿈 1개 이하인 게 다수
+  const oneliners = messages.filter((m) => m.length <= 80 && (m.match(/\n/g) || []).length <= 1).length;
+  if (oneliners >= Math.ceil(messages.length / 2) && oneliners >= 2) {
+    tags.add('한 줄 요약');
   }
-
-  // 요약 형태 — 메시지가 4줄 이하 + 짧음
-  const avgLen =
-    messages.reduce((s, m) => s + m.length, 0) / Math.max(1, messages.length);
-  if (avgLen < 140 && avgLen > 10) tags.add('짧게 요약');
 
   return Array.from(tags);
 }

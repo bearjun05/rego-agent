@@ -50,12 +50,12 @@ export function TelegramGallery() {
       </div>
 
       {!selected && (
-        <div className="grid md:grid-cols-2 gap-3 max-h-[640px] overflow-y-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
           {data.map((l) => (
             <LearnerCard key={l.agent} learner={l} onOpen={() => setSelected(l)} />
           ))}
           {data.length === 0 && (
-            <div className="font-mono text-xs text-muted col-span-2">
+            <div className="font-mono text-xs text-muted col-span-full">
               아직 텔레그램 발송 없음. 빙고 2번을 클리어한 학습자부터 여기 카드로 나타나요.
             </div>
           )}

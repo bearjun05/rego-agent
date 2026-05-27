@@ -71,7 +71,6 @@ function MiniLeaderboard({ agentSlug }: { agentSlug: string }) {
     return b.bingoDone - a.bingoDone;
   });
   const myIdx = sorted.findIndex((r) => r.name === agentSlug);
-  const top = sorted.slice(0, 5);
 
   return (
     <Link
@@ -82,14 +81,14 @@ function MiniLeaderboard({ agentSlug }: { agentSlug: string }) {
       <div className="flex items-center justify-between pb-2 border-b border-ink/15">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Ranking</div>
-          <div className="font-display font-bold text-base leading-tight">실시간 순위</div>
+          <div className="font-display font-bold text-base leading-tight">실시간 순위 ({sorted.length}명)</div>
         </div>
         <span className="font-mono text-[10px] text-muted">
           {myIdx >= 0 ? `내 ${myIdx + 1}위` : '—'} · 전체 →
         </span>
       </div>
-      <div className="space-y-1.5">
-        {top.map((r, i) => {
+      <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1">
+        {sorted.map((r, i) => {
           const isMe = r.name === agentSlug;
           const isComplete = r.bingoDone === 9;
           const rank = i + 1;
@@ -123,7 +122,7 @@ function MiniLeaderboard({ agentSlug }: { agentSlug: string }) {
             </div>
           );
         })}
-        {top.length === 0 && (
+        {sorted.length === 0 && (
           <div className="font-mono text-[10px] text-muted">데이터 없음</div>
         )}
       </div>

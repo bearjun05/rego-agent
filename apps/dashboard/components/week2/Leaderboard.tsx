@@ -27,17 +27,16 @@ export function Leaderboard() {
       .catch(() => {});
   }, []);
 
-  const top = data.slice(0, 5);
   return (
     <div className="brut p-4">
       <div className="flex items-baseline justify-between mb-3 pb-2 border-b border-ink/15">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Leaderboard</div>
-          <div className="font-display font-bold text-base">빙고 순위</div>
+          <div className="font-display font-bold text-base">빙고 순위 ({data.length}명)</div>
         </div>
       </div>
-      <ol className="space-y-3 stagger">
-        {top.map((e) => {
+      <ol className="space-y-3 stagger max-h-[420px] overflow-y-auto pr-1">
+        {data.map((e) => {
           const isComplete = e.done === 9;
           return (
             <li key={e.name} className="flex items-center gap-3">
@@ -80,7 +79,7 @@ export function Leaderboard() {
             </li>
           );
         })}
-        {top.length === 0 && (
+        {data.length === 0 && (
           <li className="font-mono text-xs text-muted">아직 데이터 없음</li>
         )}
       </ol>
