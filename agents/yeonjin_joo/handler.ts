@@ -281,24 +281,27 @@ export default defineHandler({
    */
   async onTelegramCallback(event, ctx) {
     const action = event.data.split(':')[0];
-    const label = action === 'ack' ? '✅ 확인함' : '⏭️ 패스함';
+    const status = action === 'ack' ? '✅ 확인했어요' : '⏭️ 패스했어요';
 
     // 버튼 스피너 멈추기 + toast.
     await ctx.tools['telegram.answer_callback']!({
       callbackQueryId: event.callbackQueryId,
-      text: label,
+      text: status,
     });
 
-    // 원본 메시지 끝에 처리 결과를 덧붙임 (parseMode 없이 plain — entity 깨짐 방지).
+    // 원본 메시지를 "✅ 확인했어요 / ⏭️ 패스했어요"로 수정.
+    // 상태를 맨 위에 두고 원문은 아래에 남겨 무엇을 처리했는지 알 수 있게 함.
+    // parseMode 없이 plain — 원문에 박힌 마크다운 엔티티가 깨지지 않게.
+    // (replyMarkup 미전달 → 수정 시 버튼이 사라져 중복 클릭 방지)
     const stamp = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    const newText = `${event.messageText ?? ''}\n\n— ${label} (${stamp})`;
+    const newText = `${status}  (${stamp})\n\n${event.messageText ?? ''}`;
     await ctx.tools['telegram.edit_message']!({
       chatId: event.chatId,
       messageId: event.messageId,
       text: newText,
     });
 
-    return { action, handled: true };
+    return { action, status, handled: true };
   },
 
   /**
