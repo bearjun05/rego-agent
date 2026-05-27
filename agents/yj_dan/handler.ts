@@ -4,6 +4,13 @@ export default defineHandler({
   async onSlackMention(event, ctx) {
     ctx.logger.info('슬랙 멘션 받음', { text: event.text.slice(0, 80) });
 
+    // 빙고 3: 👀 이모지 반응 (수신 확인 즉시 표시)
+    await ctx.tools['slack.reactions_add']!({
+      channel: event.channel,
+      ts: event.ts,
+      name: 'eyes',
+    });
+
     // 1. 텔레그램 알림 먼저 (다른 단계 실패 여부와 무관하게 보장)
     // 빙고 5: 슬랙 API로 실제 이름 조회
     const userInfo = await ctx.tools['slack.users_info']!({ user: event.user });
