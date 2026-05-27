@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { createLogger } from './logger.js';
 
@@ -8,6 +9,17 @@ const exec = promisify(execFile);
 const log = createLogger('git-sync');
 
 const DEFAULT_REPO_URL = 'https://github.com/bearjun05/rego-agent.git';
+
+/**
+ * 모노레포 루트 — agents/ 폴더의 부모.
+ * `process.cwd()`는 runtime이 어떻게 띄워졌느냐에 따라 apps/runtime일 수도, 모노레포 루트일 수도.
+ * 잘못된 cwd에서 git checkout 실행되면 `apps/runtime/agents/<slug>/` 같은 부산물 폴더 생성됨.
+ * → 호출자가 workdir 명시 안 한 경우 이 값을 default로 사용한다.
+ */
+function repoRoot(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, '../../..'); // src/git-sync.ts → apps/runtime/src → apps/runtime → apps → repo root
+}
 
 /**
  * 서버 시작 시 git 작업 디렉터리 부트스트랩 (T5).
@@ -18,7 +30,7 @@ const DEFAULT_REPO_URL = 'https://github.com/bearjun05/rego-agent.git';
  * 이미 .git 있으면 no-op. 실패해도 throw 안 함 (서버 부트 막지 않기).
  */
 export async function ensureGitWorkdir(opts: { workdir?: string; repoUrl?: string } = {}): Promise<{ initialized: boolean; reason?: string }> {
-  const workdir = opts.workdir ?? process.cwd();
+  const workdir = opts.workdir ?? repoRoot();
   const repoUrl = opts.repoUrl ?? process.env.GIT_REPO_URL ?? DEFAULT_REPO_URL;
 
   // git CLI 존재 확인
@@ -89,7 +101,7 @@ export async function fetchLearnerFolder(
   if (!isSafeAgentName(agentName)) {
     throw new Error(`unsafe agent name: ${agentName}`);
   }
-  const workdir = opts.workdir ?? process.cwd();
+  const workdir = opts.workdir ?? repoRoot();
   const remote = opts.remote ?? 'origin';
   const branch = `learner/${agentName}`;
 
@@ -111,7 +123,7 @@ export async function fetchLearnerFolder(
 }
 
 /** 폴더가 실제로 존재하는지 (학습자가 본인 폴더 안 만들고 reload 누른 케이스) */
-export function agentFolderExists(agentName: string, workdir = process.cwd()): boolean {
+export function agentFolderExists(agentName: string, workdir?: string): boolean {
   if (!isSafeAgentName(agentName)) return false;
-  return existsSync(path.join(workdir, 'agents', agentName));
+  return existsSync(path.join(workdir ?? repoRoot(), 'agents', agentName));
 }

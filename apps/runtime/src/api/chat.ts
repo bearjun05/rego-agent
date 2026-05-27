@@ -330,9 +330,39 @@ export function createChatApi() {
           if (action) accumulatedActions.push(action);
         }
 
-        // knowledge 도구 호출 없으면 종료
+        // knowledge 도구 호출 없으면 종료 — 단 답변이 비어있으면 폴백 1회
         if (knowledgeCalls.length === 0) {
           answer = message?.content ?? '';
+
+          // 빈 답변 + iter > 0 (즉 도구 결과 받은 후) → tools 없이 답변 강제
+          // DeepSeek V4 Flash의 multi-turn tool 합성 약함을 보완.
+          if (!answer && iteration > 0) {
+            log.info('empty answer after tool fetch — fallback with toolChoice=none');
+            llmMessages.push({
+              role: 'assistant',
+              content: null,
+              tool_calls: message?.tool_calls,
+            });
+            try {
+              const { result: forceResult } = await callOpenRouter({
+                apiKey: cfg.OPENROUTER_API_KEY,
+                model: cfg.MODEL_CHAT,
+                system,
+                messages: llmMessages,
+                temperature: 0.7,
+                maxTokens: 2000,
+                // tools 없이 — 자연어 답변 강제
+              });
+              answer = forceResult.choices[0]?.message?.content ?? '';
+              totalCostUsd +=
+                forceResult.usage?.cost ??
+                ((forceResult.usage?.prompt_tokens ?? 0) * 3 +
+                  (forceResult.usage?.completion_tokens ?? 0) * 15) /
+                  1_000_000;
+            } catch (err) {
+              log.warn('fallback answer call failed', err);
+            }
+          }
           break;
         }
 
