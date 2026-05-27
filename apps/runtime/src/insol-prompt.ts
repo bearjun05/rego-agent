@@ -63,8 +63,8 @@ export function buildInsolStaticPrompt(opts: {
     agentName: opts.agentName ?? '',
   };
 
-  // 순서: identity → study → philosophy → mission → style → cards
-  const parts = ['identity', 'study', 'philosophy', 'mission', 'style', 'cards']
+  // 순서: guardrails(최상단, 절대 양보 X) → identity → study → philosophy → mission → style → cards
+  const parts = ['guardrails', 'identity', 'study', 'philosophy', 'mission', 'style', 'cards']
     .map((n) => loadPromptFile(n))
     .filter((s) => s.length > 0)
     .map((s) => render(s, vars));
