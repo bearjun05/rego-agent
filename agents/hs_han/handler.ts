@@ -22,6 +22,22 @@ function kstDateStr(d: Date): string {
   return kst.toISOString().slice(0, 10);
 }
 
+/** 슬랙 ts(epoch seconds, "1700000000.000123") → KST "MM/DD HH:mm" */
+function slackTsToKst(ts?: string): string {
+  if (!ts) return '';
+  const sec = Number(ts.split('.')[0]);
+  if (!Number.isFinite(sec)) return '';
+  const d = new Date(sec * 1000);
+  return d.toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 async function appendDailyLog(ctx: AgentContext, entry: MentionLog): Promise<void> {
   const key = `mentions:${kstDateStr(new Date())}`;
   const prev = (await ctx.state.get<MentionLog[]>(key)) ?? [];
@@ -106,33 +122,35 @@ export default defineHandler({
       }),
     );
 
-    // 3) 텔레그램 메시지 + 답장 버튼
+    // 3) 텔레그램 메시지 + 슬랙 스레드 이동 버튼
     const meta = CATEGORY_META[category] ?? { emoji: '📨', label: category };
+    const sentAt = slackTsToKst(event.ts);
     const lines = [
       `${meta.emoji} *${meta.label}*${confidence >= 0.7 ? '' : ' (애매)'}`,
       ``,
-      `*from:* ${userLabel}`,
+      `*from:* ${userLabel}${sentAt ? `  _(${sentAt})_` : ''}`,
       `*ch:* #${channelLabel}`,
       ``,
       `*요약:* ${summary}`,
     ];
     if (reason) lines.push(``, `_${reason}_`);
+    lines.push(``, `*원문:*`, event.text);
     lines.push(``, `*답장 후보:*`);
     replies.forEach((r, i) => lines.push(`${i + 1}. ${r}`));
-    if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
 
-    // [빙고 4] [확인]/[패스] 버튼 (telegram.send + replyMarkup.inline_keyboard)
+    // 슬랙 스레드로 바로 이동하는 URL 버튼
+    const replyMarkup = event.permalink
+      ? {
+          inline_keyboard: [
+            [{ text: '💬 슬랙에서 열기', url: event.permalink }],
+          ],
+        }
+      : undefined;
+
     await ctx.tools['telegram.send']!({
       text: lines.join('\n'),
       parseMode: 'Markdown',
-      replyMarkup: {
-        inline_keyboard: [
-          [
-            { text: '✅ 확인', callback_data: `ack:${event.channel}:${event.ts}` },
-            { text: '⏭️ 패스', callback_data: `pass:${event.channel}:${event.ts}` },
-          ],
-        ],
-      },
+      ...(replyMarkup ? { replyMarkup } : {}),
     });
 
     // [빙고 8] 아침 브리핑 재료로 누적 (KST 날짜 키)
@@ -152,30 +170,6 @@ export default defineHandler({
     });
 
     return { category, confidence, summary };
-  },
-
-  /**
-   * [빙고 4] 텔레그램 버튼 클릭 처리.
-   * ack(spinner 멈춤) 후 원본 메시지 끝에 처리 결과를 덧붙임.
-   */
-  async onTelegramCallback(event, ctx) {
-    const action = event.data.split(':')[0];
-    const label = action === 'ack' ? '✅ 확인함' : '⏭️ 패스함';
-
-    await ctx.tools['telegram.answer_callback']!({
-      callbackQueryId: event.callbackQueryId,
-      text: label,
-    });
-
-    const stamp = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    const newText = `${event.messageText ?? ''}\n\n— ${label} (${stamp})`;
-    await ctx.tools['telegram.edit_message']!({
-      chatId: event.chatId,
-      messageId: event.messageId,
-      text: newText,
-    });
-
-    return { action, handled: true };
   },
 
   /**

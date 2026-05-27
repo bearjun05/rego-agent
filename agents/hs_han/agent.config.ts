@@ -24,8 +24,6 @@ export default defineAgent({
 
   tools: [
     'telegram.send',
-    'telegram.answer_callback',
-    'telegram.edit_message',
     'slack.users_info',
     'slack.conversations_info',
   ],
