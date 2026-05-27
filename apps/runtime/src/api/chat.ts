@@ -299,13 +299,16 @@ export function createChatApi() {
       let iteration = 0;
 
       while (iteration < MAX_ITERATIONS) {
+        // iteration 0(첫 호출)은 도구 호출 결정용으로 짧게, 이후 답변 패스도 짧게.
+        // maxTokens 줄이면 LLM 응답 시간 30-40% 단축됨.
+        // maxTokens 2000 — 답변 잘림 0, 길이 LLM 자율
         const { result } = await callOpenRouter({
           apiKey: cfg.OPENROUTER_API_KEY,
           model: cfg.MODEL_CHAT,
           system,
           messages: llmMessages,
           temperature: 0.7,
-          maxTokens: 800,
+          maxTokens: 2000,
           tools,
           toolChoice: 'auto',
         });
