@@ -50,7 +50,18 @@ interface Message {
 const SESSION_KEY = 'rego-chat-session';
 const PROFILE_KEY = 'rego-user-profile';
 const VERSION_KEY = 'rego-chat-version';
+const SIDE_PANEL_KEY = 'rego-side-panel-open'; // '1' | '0'
 const APP_VERSION = 'v4-2026-05-27-bootstrap'; // bootstrap 흐름 전환 — 옛 정규식 캐시 자동 청소
+
+/** 사이드패널 마지막 상태 복원 — 한 번 열렸으면 사용자가 직접 '접기' 누르기 전까지 계속 열려있게 */
+function loadSidePanelOpen(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(SIDE_PANEL_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const typingDelay = (text: string) => Math.min(500 + text.length * 38, 2100);
@@ -97,7 +108,19 @@ export function HomeChat() {
   const prevCellsRef = useRef<Record<number, 'done' | 'pending'> | null>(null);
   const [revealOpen, setRevealOpen] = useState(false);
   const revealShownRef = useRef(false);
-  const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [sidePanelOpen, setSidePanelOpenRaw] = useState(false);
+  // 변경 시 localStorage 영구 저장 — 새로고침해도 유지
+  const setSidePanelOpen = (open: boolean) => {
+    setSidePanelOpenRaw(open);
+    try {
+      localStorage.setItem(SIDE_PANEL_KEY, open ? '1' : '0');
+    } catch {}
+  };
+
+  // 마운트 시 마지막 상태 복원 (학습자 매칭 전이라도 빙고가 보였다면 새로고침 후 유지)
+  useEffect(() => {
+    if (loadSidePanelOpen()) setSidePanelOpenRaw(true);
+  }, []);
   const [celebFire, setCelebFire] = useState(0);
 
   const sessionRef = useRef<string>('');
@@ -782,6 +805,7 @@ export function HomeChat() {
               try {
                 localStorage.removeItem(PROFILE_KEY);
                 localStorage.removeItem(SESSION_KEY);
+                localStorage.removeItem(SIDE_PANEL_KEY);
               } catch {}
               window.location.reload();
             }}
