@@ -53,15 +53,15 @@ export function LiveActivityFeed() {
   }, []);
 
   return (
-    <div className="brut p-4 bg-paper">
+    <div className="brut p-4 bg-paper self-start">
       <div className="flex items-end justify-between mb-3 pb-2 border-b border-ink/15">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Live</div>
-          <div className="font-display font-bold text-base">라이브 활동</div>
+          <div className="font-display font-bold text-base">라이브 활동 ({data.length}건)</div>
         </div>
         <span className="font-mono text-[10px] text-muted">10초마다 갱신</span>
       </div>
-      <ul className="space-y-1.5 max-h-[280px] overflow-y-auto">
+      <ul className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
         {data.length === 0 && (
           <li className="font-mono text-xs text-muted">아직 활동 없음</li>
         )}

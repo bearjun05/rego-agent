@@ -28,7 +28,7 @@ export function Leaderboard() {
   }, []);
 
   return (
-    <div className="brut p-4">
+    <div className="brut p-4 self-start">
       <div className="flex items-baseline justify-between mb-3 pb-2 border-b border-ink/15">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-widest text-muted">Leaderboard</div>

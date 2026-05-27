@@ -31,7 +31,7 @@ export default function Week2Page() {
       </section>
 
       {/* Row 1: Leaderboard + Live Feed */}
-      <section className="grid md:grid-cols-2 gap-4 mb-4">
+      <section className="grid md:grid-cols-2 gap-4 mb-4 items-start">
         <Leaderboard />
         <LiveActivityFeed />
       </section>
@@ -42,7 +42,7 @@ export default function Week2Page() {
       </section>
 
       {/* Row 3: 도구 차트 + 셀별 클리어율 */}
-      <section className="grid md:grid-cols-2 gap-4 mb-4">
+      <section className="grid md:grid-cols-2 gap-4 mb-4 items-start">
         <ToolUsageChart />
         <CellClearRates />
       </section>
