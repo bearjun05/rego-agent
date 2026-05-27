@@ -33,7 +33,7 @@ interface Person {
 const SESSION_KEY = 'rego-chat-session';
 const PROFILE_KEY = 'rego-user-profile'; // { slug, given, full }
 const VERSION_KEY = 'rego-chat-version';
-const APP_VERSION = 'v2-2026-05-27-week2'; // 흐름 변경 시 올리기 → 옛 localStorage 자동 청소
+const APP_VERSION = 'v3-2026-05-27-name-fix'; // 흐름 변경 시 올리기 → 옛 localStorage 자동 청소
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const typingDelay = (text: string) => Math.min(500 + text.length * 38, 2100);
@@ -69,6 +69,26 @@ function looksLikeGreeting(text: string): boolean {
   if (clean.length === 0) return true;
   if (clean.length === 1) return true; // 한 글자는 이름 아님
   return GREETING_WORDS.has(clean);
+}
+
+/**
+ * 채팅 중 이름 정정 의도 감지.
+ * "내 이름은 웅준" / "사실 웅준이야" / "웅준이라고 불러줘" / "정정 웅준" 등.
+ * 매칭된 이름 후보를 반환 (없으면 null).
+ */
+function detectNameUpdate(content: string): string | null {
+  const patterns = [
+    /(?:내\s*이름은?|나는?|저는|난|이름\s*은)\s*([가-힣A-Za-z]{2,8})\s*(?:이?야|입니다|에요|예요|이?에요)?/,
+    /([가-힣A-Za-z]{2,8})\s*(?:라고\s*)?(?:불러줘|불러주세요)/,
+    /(?:사실|아\s*맞다|정정|바꿔|변경)\s*(?:은)?\s*([가-힣A-Za-z]{2,8})/,
+    /이름\s*(?:정정|바꿔|변경|수정)\s*([가-힣A-Za-z]{2,8})/,
+  ];
+  for (const p of patterns) {
+    const m = content.match(p);
+    const candidate = m?.[1];
+    if (candidate && !GREETING_WORDS.has(candidate.toLowerCase())) return candidate;
+  }
+  return null;
 }
 
 // 2문장 초과 텍스트를 여러 메시지로 분할. 줄바꿈 블록(목록 등)은 통째로 유지.
@@ -543,7 +563,6 @@ export function HomeChat() {
         ]);
         return;
       }
-
       const g = person ? givenName(person.displayName) : givenName(cleaned);
       const s = person?.slug ?? null;
       const sid = s ? `user-${s}` : localStorage.getItem(SESSION_KEY) ?? `anon-${Date.now()}`;
@@ -553,24 +572,35 @@ export function HomeChat() {
       setStage('chatting');
       sessionRef.current = sid;
       if (!s) localStorage.setItem(SESSION_KEY, sid);
-      localStorage.setItem(PROFILE_KEY, JSON.stringify({ slug: s, given: g, full: person?.displayName ?? cleaned }));
-
-      // 매칭된 학습자 — 고정 스크립트로 환영 (LLM 응답 일관성 위해)
+      // 매칭된 학습자만 PROFILE 저장 (잘못 매칭된 이름이 새로고침마다 부활하는 거 방지)
       if (s) {
+        localStorage.setItem(
+          PROFILE_KEY,
+          JSON.stringify({ slug: s, given: g, full: person!.displayName }),
+        );
+      }
+
+      if (s) {
+        // 매칭된 학습자 — 고정 스크립트로 환영
         await typeOut([
           `안녕하세요 ${g}님! 👋`,
           '오늘은 **2주차**예요. 저번 주에 했던 거 이어서 진행할 건데, 오늘은 실제로 슬랙과 연결해서 멘션이 오면 텔레그램으로 받아볼 거예요.',
           '그 메시지를 좀 더 예쁘게 가공하거나 여러 기능을 붙여서 — 실제로 내가 쓰는데 도움 되는 에이전트로 만들어보는 게 목표!',
           `${g}님이 조금 더 재밌게 해볼 수 있게 **빙고**를 가지고 와봤어요. 순서는 자유! **3빙고**를 먼저 완성해보세요. 🎯`,
         ]);
-        // 빙고판 열기 버튼 카드
         setMessages((m) => [
           ...m,
           { role: 'assistant', content: '', card: { type: 'open-bingo-panel' } },
         ]);
       } else {
-        // 매칭 안 됨 → LLM에 자유 응답 요청
-        await askCoach(cleaned, sid, s, g);
+        // 매칭 안 됨 → 손님 모드: 스터디 소개 + 자유 질문 유도
+        await typeOut([
+          `반가워요 ${g}님! 🐱 학습자 명단에는 없는 이름인데, 놀러 오신 거예요?`,
+          '여기는 **인프피솔루션** — 팀스파르타 사내 스터디예요. 매주 수요일 12:30에 운동장1에 모여서 식사하면서 진행해요.',
+          '"에이전트는 레고다"가 컨셉이에요. AI 모델 + 도구 + 규칙을 블록처럼 끼워서 본인 일을 도와주는 AI 비서를 8주 동안 만들어가는 중.',
+          '저는 인솔이 — 학습자들 개인 페이스로 잘 따라갈 수 있게 도와주는 교육 에이전트예요.',
+          '궁금한 거 자유롭게 물어봐 주세요! "에이전트가 뭐예요?" / "어떻게 만들어요?" / "참여하려면?" 같은 거 물으셔도 좋아요.',
+        ]);
       }
       return;
     }
@@ -608,6 +638,46 @@ export function HomeChat() {
       return;
     }
 
+    // 1.5) 이름 정정 의도 자동 감지 — "내 이름은 OO" / "OO이야" 같은 표현
+    const newNameRaw = detectNameUpdate(content);
+    if (newNameRaw && newNameRaw !== given) {
+      setMessages((m) => [...m, { role: 'user', content }]);
+      const person = matchPerson(newNameRaw, rosterRef.current);
+      const newGiven = person ? givenName(person.displayName) : givenName(newNameRaw);
+      const newSlug = person?.slug ?? null;
+      setGiven(newGiven);
+      if (newSlug) {
+        setSlug(newSlug);
+        const newSid = `user-${newSlug}`;
+        sessionRef.current = newSid;
+        try {
+          localStorage.setItem(
+            PROFILE_KEY,
+            JSON.stringify({ slug: newSlug, given: newGiven, full: person!.displayName }),
+          );
+        } catch {}
+        await typeOut([
+          `아 ${newGiven}님이셨군요! 정정했어요 ✓`,
+          '이제 ' + newGiven + '님으로 부를게요.',
+        ]);
+        setSidePanelOpen(true);
+      } else {
+        // roster 매칭 안 됨 — 호칭만 바꾸고 localStorage 저장 X
+        try {
+          const cur = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? '{}');
+          if (cur.slug) {
+            // 매칭된 사용자가 호칭만 바꾸는 경우 — 호칭만 업데이트
+            localStorage.setItem(
+              PROFILE_KEY,
+              JSON.stringify({ ...cur, given: newGiven }),
+            );
+          }
+        } catch {}
+        await typeOut([`${newGiven}님이라고 부를게요. (학습자 명단엔 없는 이름이라 일부 기능 제한될 수 있어요)`]);
+      }
+      return;
+    }
+
     // 2) 자유 대화 — 카드 결정은 서버 LLM tool calling이 함
     setMessages((m) => [...m, { role: 'user', content }]);
     await askCoach(content, sessionRef.current, slug, given);
@@ -637,7 +707,46 @@ export function HomeChat() {
           <div>
             <div className="font-display font-bold text-lg leading-tight">인솔이</div>
             <div className="font-mono text-[10px] uppercase text-muted">
-              {given ? `${given}님과 함께 ${weekLabel()}` : '오늘 뭐 할지 알려줄게요'}
+              {given ? (
+                <>
+                  <button
+                    onClick={() => {
+                      const next = window.prompt('호칭을 어떻게 부를까요? (예: 웅준)', given);
+                      if (!next || !next.trim()) return;
+                      const trimmed = next.trim();
+                      const person = matchPerson(trimmed, rosterRef.current);
+                      const ng = person ? givenName(person.displayName) : givenName(trimmed);
+                      setGiven(ng);
+                      if (person) {
+                        setSlug(person.slug);
+                        sessionRef.current = `user-${person.slug}`;
+                        try {
+                          localStorage.setItem(
+                            PROFILE_KEY,
+                            JSON.stringify({ slug: person.slug, given: ng, full: person.displayName }),
+                          );
+                        } catch {}
+                      } else {
+                        try {
+                          const cur = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? '{}');
+                          if (cur.slug) {
+                            localStorage.setItem(
+                              PROFILE_KEY,
+                              JSON.stringify({ ...cur, given: ng }),
+                            );
+                          }
+                        } catch {}
+                      }
+                    }}
+                    className="hover:text-rust transition-colors"
+                    title="호칭 변경"
+                  >
+                    {given}님과 함께 {weekLabel()}
+                  </button>
+                </>
+              ) : (
+                '오늘 뭐 할지 알려줄게요'
+              )}
             </div>
           </div>
         </div>
