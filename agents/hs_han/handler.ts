@@ -74,17 +74,21 @@ export default defineHandler({
     replies.forEach((r, i) => lines.push(`${i + 1}. ${r}`));
     if (event.permalink) lines.push(``, `[원문 보기](${event.permalink})`);
 
-    await ctx.tools['telegram.send_with_button']!({
+    // [빙고 4] [확인]/[패스] 버튼 (telegram.send + replyMarkup.inline_keyboard)
+    await ctx.tools['telegram.send']!({
       text: lines.join('\n'),
       parseMode: 'Markdown',
-      buttons: [
-        { text: '1️⃣', callbackData: 'reply:0' },
-        { text: '2️⃣', callbackData: 'reply:1' },
-        { text: '3️⃣', callbackData: 'reply:2' },
-      ],
+      replyMarkup: {
+        inline_keyboard: [
+          [
+            { text: '✅ 확인', callback_data: `ack:${event.channel}:${event.ts}` },
+            { text: '⏭️ 패스', callback_data: `pass:${event.channel}:${event.ts}` },
+          ],
+        ],
+      },
     });
 
-    // 답장 후보를 상태에 저장 (콜백 처리 시 사용)
+    // 답장 후보를 상태에 저장 (추후 슬랙 답장 자동화에 사용 가능)
     await ctx.state.set(`replies:${event.ts ?? Date.now()}`, {
       channel: event.channel,
       threadTs: event.ts,
@@ -92,5 +96,29 @@ export default defineHandler({
     });
 
     return { category, confidence, summary };
+  },
+
+  /**
+   * [빙고 4] 텔레그램 버튼 클릭 처리.
+   * ack(spinner 멈춤) 후 원본 메시지 끝에 처리 결과를 덧붙임.
+   */
+  async onTelegramCallback(event, ctx) {
+    const action = event.data.split(':')[0];
+    const label = action === 'ack' ? '✅ 확인함' : '⏭️ 패스함';
+
+    await ctx.tools['telegram.answer_callback']!({
+      callbackQueryId: event.callbackQueryId,
+      text: label,
+    });
+
+    const stamp = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    const newText = `${event.messageText ?? ''}\n\n— ${label} (${stamp})`;
+    await ctx.tools['telegram.edit_message']!({
+      chatId: event.chatId,
+      messageId: event.messageId,
+      text: newText,
+    });
+
+    return { action, handled: true };
   },
 });
